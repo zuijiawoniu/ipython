@@ -26,7 +26,7 @@ def get_pasted_lines(sentinel, l_input=py3compat.input, quiet=False):
         prompt = ""
     while True:
         try:
-            l = py3compat.str_to_unicode(l_input(prompt))
+            l = l_input(prompt)
             if l == sentinel:
                 return
             else:
@@ -72,7 +72,7 @@ class TerminalMagics(Magics):
         # Sanity checks
         if b is None:
             raise UsageError('No previous pasted block available')
-        if not isinstance(b, py3compat.string_types):
+        if not isinstance(b, str):
             raise UsageError(
                 "Variable 'pasted_block' is not a string, can't execute")
 
@@ -81,8 +81,9 @@ class TerminalMagics(Magics):
 
     @line_magic
     def autoindent(self, parameter_s = ''):
-        """Toggle autoindent on/off (if available)."""
-
+        """Toggle autoindent on/off (deprecated)"""
+        print("%autoindent is deprecated since IPython 5: you can now paste "
+              "multiple lines without turning autoindentation off.")
         self.shell.set_autoindent()
         print("Automatic indentation is:",['OFF','ON'][self.shell.autoindent])
 

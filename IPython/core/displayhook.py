@@ -7,13 +7,12 @@ This defines a callable class that IPython uses for `sys.displayhook`.
 # Copyright (c) IPython Development Team.
 # Distributed under the terms of the Modified BSD License.
 
-
+import builtins as builtin_mod
 import sys
 import io as _io
 import tokenize
 
 from traitlets.config.configurable import Configurable
-from IPython.utils.py3compat import builtin_mod, cast_unicode_py2
 from traitlets import Instance, Float
 from warnings import warn
 
@@ -87,7 +86,7 @@ class DisplayHook(Configurable):
         # do not print output if input ends in ';'
         
         try:
-            cell = cast_unicode_py2(self.shell.history_manager.input_hist_parsed[-1])
+            cell = self.shell.history_manager.input_hist_parsed[-1]
         except IndexError:
             # some uses of ipshellembed may fail here
             return False

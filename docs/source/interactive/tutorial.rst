@@ -10,12 +10,62 @@ more than the standard prompt. Some key features are described here. For more
 information, check the :ref:`tips page <tips>`, or look at examples in the
 `IPython cookbook <https://github.com/ipython/ipython/wiki/Cookbook%3A-Index>`_.
 
+If you haven't done that yet see `how to install ipython <install>`_ .
+
 If you've never used Python before, you might want to look at `the official
 tutorial <http://docs.python.org/tutorial/>`_ or an alternative, `Dive into
 Python <http://diveintopython.net/toc/index.html>`_.
 
-The four most helpful commands 
-===============================
+Start IPython by issuing the ``ipython`` command from your shell, you should be
+greeted by the following::
+
+    Python 3.6.0
+    Type 'copyright', 'credits' or 'license' for more information
+    IPython 6.0.0.dev -- An enhanced Interactive Python. Type '?' for help.
+
+    In [1]:
+
+
+Unlike the Python REPL, you will see that the input prompt is ``In [N]:``
+instead of ``>>>``. The number ``N`` in the prompt will be used later in this
+tutorial but should usually not impact the computation.
+
+You should be able to type single line expressions and press enter to evaluate
+them. If an expression is incomplete, IPython will automatically detect this and
+add a new line when you press :kbd:`Enter` instead of executing right away.
+
+Feel free to explore multi-line text input. Unlike many other REPLs, with
+IPython you can use the up and down arrow keys when editing multi-line
+code blocks.
+
+Here is an example of a longer interaction with the IPython REPL,
+which we often refer to as an IPython *session* ::
+
+    In [1]: print('Hello IPython')
+    Hello IPython
+
+    In [2]: 21 * 2
+    Out[2]: 42
+
+    In [3]: def say_hello(name):
+       ...:     print('Hello {name}'.format(name=name))
+       ...:
+
+We won't get into details right now, but you may notice a few differences to
+the standard Python REPL. First, your code should be syntax-highlighted as you
+type. Second, you will see that some results will have an ``Out[N]:`` prompt,
+while some other do not. We'll come to this later.
+
+Depending on the exact command you are typing you might realize that sometimes
+:kbd:`Enter` will add a new line, and sometimes it will execute the current
+statement. IPython tries to guess what you are doing, so most of the time you
+should not have to care. Though if by any chance IPython does not the right
+thing you can force execution of the current code block by pressing in sequence
+:kbd:`Esc` and :kbd:`Enter`. You can also force the insertion of a new line at
+the position of the cursor by using :kbd:`Ctrl-o`.
+
+The four most helpful commands
+==============================
 
 The four most helpful commands, as well as their brief description, is shown
 to you in a banner, every time you start IPython:
@@ -36,6 +86,22 @@ Tab completion, especially for attributes, is a convenient way to explore the
 structure of any object you're dealing with. Simply type ``object_name.<TAB>``
 to view the object's attributes. Besides Python objects and keywords, tab
 completion also works on file and directory names.
+
+Starting with IPython 6.0, if ``jedi`` is installed, IPython will try to pull
+completions from Jedi as well. This allows to not only inspect currently
+existing objects, but also to infer completion statically without executing
+code. There is nothing particular need to get this to work, simply use tab
+completion on more complex expressions like the following::
+
+    >>> data = ['Number of users', 123456]
+    ... data[0].<tab>
+
+IPython and Jedi will be able to infer that ``data[0]`` is actually a string
+and should show relevant completions like ``upper()``, ``lower()`` and other
+string methods. You can use the :kbd:`Tab` key to cycle through completions,
+and while a completion is highlighted, its type will be shown as well.
+When the type of the completion is a function, the completer will also show the
+signature of the function when highlighted.
 
 Exploring your objects
 ======================
@@ -63,18 +129,18 @@ separate argument.
 Magics are useful as convenient functions where Python syntax is not the most
 natural one, or when one want to embed invalid python syntax in their work flow. 
 
-The following examples show how to call the builtin :magic:`timeit` magic, both
+The following examples show how to call the built-in :magic:`timeit` magic, both
 in line and cell mode::
 
       In [1]: %timeit range(1000)
       100000 loops, best of 3: 7.76 us per loop
 
       In [2]: %%timeit x = range(10000)
-	 ...: max(x)
-	 ...: 
+      ...: max(x)
+      ...: 
       1000 loops, best of 3: 223 us per loop
 
-The builtin magics include:
+The built-in magics include:
 
 - Functions that work with code: :magic:`run`, :magic:`edit`, :magic:`save`,
   :magic:`macro`, :magic:`recall`, etc.
@@ -120,7 +186,7 @@ imported modules, which have to be specifically reloaded). IPython also includes
 for running them under the control of either Python's pdb debugger (-d) or
 profiler (-p).
 
-The :magic:`edit` command gives a reasonable approximation of multiline editing,
+The :magic:`edit` command gives a reasonable approximation of multi-line editing,
 by invoking your favorite editor on the spot. IPython will execute the
 code you type in there as if it were typed interactively. Note that for
 :magic:`edit` to work, the call to startup your editor has to be a blocking

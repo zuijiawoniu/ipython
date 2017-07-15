@@ -5,6 +5,7 @@
 # Distributed under the terms of the Modified BSD License.
 
 
+from inspect import Signature, Parameter
 import os
 import re
 import sys
@@ -17,11 +18,11 @@ from IPython.core.magic import (Magics, magics_class, line_magic,
                                 register_line_magic, register_cell_magic,
                                 register_line_cell_magic)
 from decorator import decorator
+from IPython import get_ipython
 from IPython.testing.decorators import skipif
-from IPython.testing.tools import AssertPrints
+from IPython.testing.tools import AssertPrints, AssertNotPrints
 from IPython.utils.path import compress_user
 from IPython.utils import py3compat
-from IPython.utils.signatures import Signature, Parameter
 
 
 #-----------------------------------------------------------------------------
@@ -39,7 +40,7 @@ ip = get_ipython()
 # defined, if any code is inserted above, the following line will need to be
 # updated.  Do NOT insert any whitespace between the next line and the function
 # definition below.
-THIS_LINE_NUMBER = 42  # Put here the actual number of this line
+THIS_LINE_NUMBER = 43  # Put here the actual number of this line
 
 from unittest import TestCase
 
@@ -68,7 +69,7 @@ def test_find_file_decorated1():
 
     @decorator
     def noop1(f):
-        def wrapper():
+        def wrapper(*a, **kw):
             return f(*a, **kw)
         return wrapper
 
@@ -205,68 +206,9 @@ class SerialLiar(object):
     def __getattr__(self, item):
         return SerialLiar(self.max_fibbing_twig, self.lies_told + 1)
 
-
-def check_calltip(obj, name, call, docstring):
-    """Generic check pattern all calltip tests will use"""
-    info = inspector.info(obj, name)
-    call_line, ds = oinspect.call_tip(info)
-    nt.assert_equal(call_line, call)
-    nt.assert_equal(ds, docstring)
-
 #-----------------------------------------------------------------------------
 # Tests
 #-----------------------------------------------------------------------------
-
-def test_calltip_class():
-    check_calltip(Call, 'Call', 'Call(x, y=1)', Call.__init__.__doc__)
-
-
-def test_calltip_instance():
-    c = Call(1)
-    check_calltip(c, 'c', 'c(*a, **kw)', c.__call__.__doc__)
-
-
-def test_calltip_method():
-    c = Call(1)
-    check_calltip(c.method, 'c.method', 'c.method(x, z=2)', c.method.__doc__)
-
-
-def test_calltip_function():
-    check_calltip(f, 'f', 'f(x, y=2, *a, **kw)', f.__doc__)
-
-
-def test_calltip_function2():
-    check_calltip(g, 'g', 'g(y, z=3, *a, **kw)', '<no docstring>')
-
-
-@skipif(sys.version_info >= (3, 5))
-def test_calltip_builtin():
-    check_calltip(sum, 'sum', None, sum.__doc__)
-
-
-def test_calltip_line_magic():
-    check_calltip(lmagic, 'lmagic', 'lmagic(line)', "A line magic")
-
-        
-def test_calltip_cell_magic():
-    check_calltip(cmagic, 'cmagic', 'cmagic(line, cell)', "A cell magic")
-
-        
-def test_calltip_line_cell_magic():
-    check_calltip(lcmagic, 'lcmagic', 'lcmagic(line, cell=None)', 
-                  "A line/cell magic")
-        
-
-def test_class_magics():
-    cm = SimpleMagics(ip)
-    ip.register_magics(cm)
-    check_calltip(cm.Clmagic, 'Clmagic', 'Clmagic(cline)',
-                  "A class-based line magic")
-    check_calltip(cm.Ccmagic, 'Ccmagic', 'Ccmagic(cline, ccell)',
-                  "A class-based cell magic")
-    check_calltip(cm.Clcmagic, 'Clcmagic', 'Clcmagic(cline, ccell=None)',
-                  "A class-based line/cell magic")
-    
 
 def test_info():
     "Check that Inspector.info fills out various fields as expected."
@@ -285,8 +227,7 @@ def test_info():
     nt.assert_equal(i['docstring'], Call.__doc__)
     nt.assert_equal(i['source'], None)
     nt.assert_true(i['isclass'])
-    _self_py2 = '' if py3compat.PY3 else 'self, '
-    nt.assert_equal(i['init_definition'], "Call(%sx, y=1)" % _self_py2)
+    nt.assert_equal(i['init_definition'], "Call(x, y=1)")
     nt.assert_equal(i['init_docstring'], Call.__init__.__doc__)
 
     i = inspector.info(Call, detail_level=1)
@@ -301,15 +242,6 @@ def test_info():
     nt.assert_equal(i['class_docstring'], Call.__doc__)
     nt.assert_equal(i['init_docstring'], Call.__init__.__doc__)
     nt.assert_equal(i['call_docstring'], Call.__call__.__doc__)
-
-    # Test old-style classes, which for example may not have an __init__ method.
-    if not py3compat.PY3:
-        i = inspector.info(OldStyle)
-        nt.assert_equal(i['type_name'], 'classobj')
-
-        i = inspector.info(OldStyle())
-        nt.assert_equal(i['type_name'], 'instance')
-        nt.assert_equal(i['docstring'], OldStyle.__doc__)
 
 def test_class_signature():
     info = inspector.info(HasSignature, 'HasSignature')
@@ -406,12 +338,12 @@ def test_property_docstring_is_in_info_for_detail_level_0():
             pass
 
     ip.user_ns['a_obj'] = A()
-    nt.assert_equals(
+    nt.assert_equal(
         'This is `foobar` property.',
         ip.object_inspect('a_obj.foobar', detail_level=0)['docstring'])
 
     ip.user_ns['a_cls'] = A
-    nt.assert_equals(
+    nt.assert_equal(
         'This is `foobar` property.',
         ip.object_inspect('a_cls.foobar', detail_level=0)['docstring'])
 
@@ -427,6 +359,54 @@ def test_pinfo_nonascii():
     from . import nonascii2
     ip.user_ns['nonascii2'] = nonascii2
     ip._inspect('pinfo', 'nonascii2', detail_level=1)
+
+
+def test_pinfo_docstring_no_source():
+    """Docstring should be included with detail_level=1 if there is no source"""
+    with AssertPrints('Docstring:'):
+        ip._inspect('pinfo', 'str.format', detail_level=0)
+    with AssertPrints('Docstring:'):
+        ip._inspect('pinfo', 'str.format', detail_level=1)
+
+
+def test_pinfo_no_docstring_if_source():
+    """Docstring should not be included with detail_level=1 if source is found"""
+    def foo():
+        """foo has a docstring"""
+
+    ip.user_ns['foo'] = foo
+
+    with AssertPrints('Docstring:'):
+        ip._inspect('pinfo', 'foo', detail_level=0)
+    with AssertPrints('Source:'):
+        ip._inspect('pinfo', 'foo', detail_level=1)
+    with AssertNotPrints('Docstring:'):
+        ip._inspect('pinfo', 'foo', detail_level=1)
+
+
+def test_pinfo_docstring_if_detail_and_no_source():
+    """ Docstring should be displayed if source info not available """
+    obj_def = '''class Foo(object):
+                  """ This is a docstring for Foo """
+                  def bar(self):
+                      """ This is a docstring for Foo.bar """
+                      pass
+              ''' 
+    
+    ip.run_cell(obj_def)
+    ip.run_cell('foo = Foo()')
+    
+    with AssertNotPrints("Source:"):
+        with AssertPrints('Docstring:'):
+            ip._inspect('pinfo', 'foo', detail_level=0)
+        with AssertPrints('Docstring:'):
+            ip._inspect('pinfo', 'foo', detail_level=1)
+        with AssertPrints('Docstring:'):
+            ip._inspect('pinfo', 'foo.bar', detail_level=0)
+
+    with AssertNotPrints('Docstring:'):
+        with AssertPrints('Source:'):
+            ip._inspect('pinfo', 'foo.bar', detail_level=1)
 
 
 def test_pinfo_magic():

@@ -15,7 +15,7 @@ from IPython.core.inputtransformer import InputTransformer
 from IPython.core.tests.test_inputtransformer import syntax, syntax_ml
 from IPython.testing import tools as tt
 from IPython.utils import py3compat
-from IPython.utils.py3compat import string_types, input
+from IPython.utils.py3compat  import input
 
 #-----------------------------------------------------------------------------
 # Semi-complete examples (also used as tests)
@@ -100,7 +100,7 @@ def test_remove_comments():
 
 def test_get_input_encoding():
     encoding = isp.get_input_encoding()
-    nt.assert_true(isinstance(encoding, string_types))
+    nt.assert_true(isinstance(encoding, str))
     # simple-minded check that at least encoding a simple string works with the
     # encoding we got.
     nt.assert_equal(u'test'.encode(encoding), b'test')
@@ -479,11 +479,11 @@ class IPythonInputTestCase(InputSplitterTestCase):
         
         for raw, expected in [
             ("a=5", "a=5#"),
-            ("%ls foo", "get_ipython().magic(%r)" % u'ls foo#'),
-            ("!ls foo\n%ls bar", "get_ipython().system(%r)\nget_ipython().magic(%r)" % (
-                u'ls foo#', u'ls bar#'
+            ("%ls foo", "get_ipython().run_line_magic(%r, %r)" % (u'ls', u'foo#')),
+            ("!ls foo\n%ls bar", "get_ipython().system(%r)\nget_ipython().run_line_magic(%r, %r)" % (
+                u'ls foo#', u'ls', u'bar#'
             )),
-            ("1\n2\n3\n%ls foo\n4\n5", "1#\n2#\n3#\nget_ipython().magic(%r)\n4#\n5#" % u'ls foo#'),
+            ("1\n2\n3\n%ls foo\n4\n5", "1#\n2#\n3#\nget_ipython().run_line_magic(%r, %r)\n4#\n5#" % (u'ls', u'foo#')),
         ]:
             out = isp.transform_cell(raw)
             self.assertEqual(out.rstrip(), expected.rstrip())
@@ -568,7 +568,7 @@ class CellMagicsCommon(object):
     def test_whole_cell(self):
         src = "%%cellm line\nbody\n"
         out = self.sp.transform_cell(src)
-        ref = u"get_ipython().run_cell_magic({u}'cellm', {u}'line', {u}'body')\n"
+        ref = u"get_ipython().run_cell_magic('cellm', 'line', 'body')\n"
         nt.assert_equal(out, py3compat.u_format(ref))
     
     def test_cellmagic_help(self):
@@ -612,3 +612,30 @@ class LineModeCellMagics(CellMagicsCommon, unittest.TestCase):
         sp.push('\n')
         # In this case, a blank line should end the cell magic
         nt.assert_false(sp.push_accepts_more()) #2
+
+indentation_samples = [
+    ('a = 1', 0),
+    ('for a in b:', 4),
+    ('def f():', 4),
+    ('def f(): #comment', 4),
+    ('a = ":#not a comment"', 0),
+    ('def f():\n    a = 1', 4),
+    ('def f():\n    return 1', 0),
+    ('for a in b:\n'
+     '   if a < 0:'
+     '       continue', 3),
+    ('a = {', 4),
+    ('a = {\n'
+     '     1,', 5),
+    ('b = """123', 0),
+    ('', 0),
+    ('def f():\n    pass', 0),
+    ('class Bar:\n    def f():\n        pass', 4),
+    ('class Bar:\n    def f():\n        raise', 4),
+]
+
+def test_find_next_indent():
+    for code, exp in indentation_samples:
+        res = isp.find_next_indent(code)
+        msg = "{!r} != {!r} (expected)\n Code: {!r}".format(res, exp, code)
+        assert res == exp, msg

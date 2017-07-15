@@ -7,11 +7,7 @@ import os.path
 from textwrap import dedent
 import traceback
 import unittest
-
-try:
-    from unittest import mock
-except ImportError:
-    import mock    # Python 2
+from unittest import mock
 
 from ..ultratb import ColorTB, VerboseTB, find_recursion
 
@@ -20,7 +16,6 @@ from IPython.testing import tools as tt
 from IPython.testing.decorators import onlyif_unicode_paths
 from IPython.utils.syspathcontext import prepended_to_syspath
 from IPython.utils.tempdir import TemporaryDirectory
-from IPython.utils.py3compat import PY3
 
 ip = get_ipython()
 
@@ -172,6 +167,33 @@ class SyntaxErrorTest(unittest.TestCase):
             with tt.AssertPrints("line unknown"):
                 ip.run_cell("raise SyntaxError()")
 
+    def test_syntaxerror_no_stacktrace_at_compile_time(self):
+        syntax_error_at_compile_time = """
+def foo():
+    ..
+"""
+        with tt.AssertPrints("SyntaxError"):
+            ip.run_cell(syntax_error_at_compile_time)
+
+        with tt.AssertNotPrints("foo()"):
+            ip.run_cell(syntax_error_at_compile_time)
+
+    def test_syntaxerror_stacktrace_when_running_compiled_code(self):
+        syntax_error_at_runtime = """
+def foo():
+    eval("..")
+
+def bar():
+    foo()
+
+bar()
+"""
+        with tt.AssertPrints("SyntaxError"):
+            ip.run_cell(syntax_error_at_runtime)
+        # Assert syntax error during runtime generate stacktrace
+        with tt.AssertPrints(["foo()", "bar()"]):
+            ip.run_cell(syntax_error_at_runtime)
+
     def test_changing_py_file(self):
         with TemporaryDirectory() as td:
             fname = os.path.join(td, "foo.py")
@@ -230,20 +252,17 @@ except Exception:
     """
 
     def test_direct_cause_error(self):
-        if PY3:
-            with tt.AssertPrints(["KeyError", "NameError", "direct cause"]):
-                ip.run_cell(self.DIRECT_CAUSE_ERROR_CODE)
+        with tt.AssertPrints(["KeyError", "NameError", "direct cause"]):
+            ip.run_cell(self.DIRECT_CAUSE_ERROR_CODE)
 
     def test_exception_during_handling_error(self):
-        if PY3:
-            with tt.AssertPrints(["KeyError", "NameError", "During handling"]):
-                ip.run_cell(self.EXCEPTION_DURING_HANDLING_CODE)
+        with tt.AssertPrints(["KeyError", "NameError", "During handling"]):
+            ip.run_cell(self.EXCEPTION_DURING_HANDLING_CODE)
 
     def test_suppress_exception_chaining(self):
-        if PY3:
-            with tt.AssertNotPrints("ZeroDivisionError"), \
-                    tt.AssertPrints("ValueError", suppress=False):
-                ip.run_cell(self.SUPPRESS_CHAINING_CODE)
+        with tt.AssertNotPrints("ZeroDivisionError"), \
+             tt.AssertPrints("ValueError", suppress=False):
+            ip.run_cell(self.SUPPRESS_CHAINING_CODE)
 
 
 class RecursionTest(unittest.TestCase):

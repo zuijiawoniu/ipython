@@ -13,7 +13,8 @@ The code in this file is mainly lifted out of cmd.py in Python 2.2, with minor
 changes. Licensing should therefore be under the standard Python terms.  For
 details on the PSF (Python Software Foundation) standard license, see:
 
-http://www.python.org/2.2.3/license.html"""
+https://docs.python.org/2/license.html
+"""
 
 #*****************************************************************************
 #
@@ -28,11 +29,12 @@ http://www.python.org/2.2.3/license.html"""
 import bdb
 import functools
 import inspect
+import linecache
 import sys
 import warnings
 
 from IPython import get_ipython
-from IPython.utils import PyColorize, ulinecache
+from IPython.utils import PyColorize
 from IPython.utils import coloransi, py3compat
 from IPython.core.excolors import exception_colors
 from IPython.testing.skipdoctest import skip_doctest
@@ -407,7 +409,7 @@ class Pdb(OldPdb):
         ret.append(u'%s(%s)%s\n' % (link,lineno,call))
 
         start = lineno - 1 - context//2
-        lines = ulinecache.getlines(filename)
+        lines = linecache.getlines(filename)
         start = min(start, len(lines) - context)
         start = max(start, 0)
         lines = lines[start : start + context]
@@ -466,7 +468,7 @@ class Pdb(OldPdb):
                 filename = self._exec_filename
 
             for lineno in range(first, last+1):
-                line = ulinecache.getline(filename, lineno)
+                line = linecache.getline(filename, lineno)
                 if not line:
                     break
 
@@ -484,6 +486,8 @@ class Pdb(OldPdb):
             pass
 
     def do_list(self, arg):
+        """Print lines of code from the current stack frame
+        """
         self.lastcmd = 'list'
         last = None
         if arg:
@@ -527,6 +531,10 @@ class Pdb(OldPdb):
         return inspect.getblock(lines[lineno:]), lineno+1
 
     def do_longlist(self, arg):
+        """Print lines of code from the current stack frame.
+
+        Shows more lines than 'list' does.
+        """
         self.lastcmd = 'longlist'
         try:
             lines, lineno = self.getsourcelines(self.curframe)

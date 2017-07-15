@@ -2,6 +2,7 @@
 
 
 import argparse
+import textwrap
 import io
 import sys
 from pprint import pformat
@@ -12,13 +13,13 @@ from IPython.core.magic import Magics, magics_class, line_magic, magic_escapes
 from IPython.utils.text import format_screen, dedent, indent
 from IPython.testing.skipdoctest import skip_doctest
 from IPython.utils.ipstruct import Struct
-from IPython.utils.py3compat import unicode_type
 from warnings import warn
 from logging import error
 
 
 class MagicsDisplay(object):
-    def __init__(self, magics_manager):
+    def __init__(self, magics_manager, ignore=None):
+        self.ignore = ignore if ignore else []
         self.magics_manager = magics_manager
     
     def _lsmagic(self):
@@ -28,10 +29,10 @@ class MagicsDisplay(object):
         mman = self.magics_manager
         magics = mman.lsmagic()
         out = ['Available line magics:',
-               mesc + ('  '+mesc).join(sorted(magics['line'])),
+               mesc + ('  '+mesc).join(sorted([m for m,v in magics['line'].items() if (v not in self.ignore)])),
                '',
                'Available cell magics:',
-               cesc + ('  '+cesc).join(sorted(magics['cell'])),
+               cesc + ('  '+cesc).join(sorted([m for m,v in magics['cell'].items() if (v not in self.ignore)])),
                '',
                mman.auto_status()]
         return '\n'.join(out)
@@ -90,6 +91,10 @@ class BasicMagics(Magics):
         'target',
         help="""Name of the existing line or cell magic."""
     )
+    @magic_arguments.argument(
+        '-p', '--params', default=None,
+        help="""Parameters passed to the magic function."""
+    )
     @line_magic
     def alias_magic(self, line=''):
         """Create an alias for an existing line or cell magic.
@@ -117,7 +122,11 @@ class BasicMagics(Magics):
 
           In [6]: %whereami
           Out[6]: u'/home/testuser'
+          
+          In [7]: %alias_magic h history -p "-l 30" --line
+          Created `%h` as an alias for `%history -l 30`.
         """
+
         args = magic_arguments.parse_argstring(self.alias_magic, line)
         shell = self.shell
         mman = self.shell.magics_manager
@@ -125,6 +134,12 @@ class BasicMagics(Magics):
 
         target = args.target.lstrip(escs)
         name = args.name.lstrip(escs)
+
+        params = args.params
+        if (params and
+                ((params.startswith('"') and params.endswith('"'))
+                or (params.startswith("'") and params.endswith("'")))):
+            params = params[1:-1]
 
         # Find the requested magics.
         m_line = shell.find_magic(target, 'line')
@@ -146,22 +161,24 @@ class BasicMagics(Magics):
             args.line = bool(m_line)
             args.cell = bool(m_cell)
 
+        params_str = "" if params is None else " " + params
+
         if args.line:
-            mman.register_alias(name, target, 'line')
-            print('Created `%s%s` as an alias for `%s%s`.' % (
+            mman.register_alias(name, target, 'line', params)
+            print('Created `%s%s` as an alias for `%s%s%s`.' % (
                 magic_escapes['line'], name,
-                magic_escapes['line'], target))
+                magic_escapes['line'], target, params_str))
 
         if args.cell:
-            mman.register_alias(name, target, 'cell')
-            print('Created `%s%s` as an alias for `%s%s`.' % (
+            mman.register_alias(name, target, 'cell', params)
+            print('Created `%s%s` as an alias for `%s%s%s`.' % (
                 magic_escapes['cell'], name,
-                magic_escapes['cell'], target))
+                magic_escapes['cell'], target, params_str))
 
     @line_magic
     def lsmagic(self, parameter_s=''):
         """List currently available magic functions."""
-        return MagicsDisplay(self.shell.magics_manager)
+        return MagicsDisplay(self.shell.magics_manager, ignore=[self.pip])
 
     def _magic_docs(self, brief=False, rest=False):
         """Return docstrings from magic functions."""
@@ -293,12 +310,9 @@ Currently the magic system has the following functions:""",
         prun : run code using the Python profiler
                (:meth:`~IPython.core.magics.execution.ExecutionMagics.prun`)
         """
-        warn("%profile is now deprecated. Please use get_ipython().profile instead.")
-        from IPython.core.application import BaseIPythonApplication
-        if BaseIPythonApplication.initialized():
-            print(BaseIPythonApplication.instance().profile)
-        else:
-            error("profile is an application-level value, but you don't appear to be in an IPython application")
+        raise UsageError("The `%profile` magic has been deprecated since IPython 2.0. "
+            "and removed in IPython 6.0. Please use the value of `get_ipython().profile` instead "
+            "to see current profile in use. Perhaps you meant to use `%prun` to profile code?")
 
     @line_magic
     def pprint(self, parameter_s=''):
@@ -378,7 +392,24 @@ Currently the magic system has the following functions:""",
             xmode_switch_err('user')
 
     @line_magic
-    def quickref(self,arg):
+    def pip(self, args=''):
+        """
+        Intercept usage of ``pip`` in IPython and direct user to run command outside of IPython.
+        """
+        print(textwrap.dedent('''
+        The following command must be run outside of the IPython shell:
+
+            $ pip {args}
+
+        The Python package manager (pip) can only be used from outside of IPython.
+        Please reissue the `pip` command in a separate terminal or command prompt.
+
+        See the Python documentation for more informations on how to install packages:
+
+            https://docs.python.org/3/installing/'''.format(args=args)))
+
+    @line_magic
+    def quickref(self, arg):
         """ Show a quick reference sheet """
         from IPython.core.usage import quick_reference
         qr = quick_reference + self._magic_docs(brief=True)
@@ -550,7 +581,7 @@ Currently the magic system has the following functions:""",
         help=argparse.SUPPRESS
     )
     @magic_arguments.argument(
-        'filename', type=unicode_type,
+        'filename', type=str,
         help='Notebook name or filename'
     )
     @line_magic

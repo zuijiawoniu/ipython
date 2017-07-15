@@ -3,6 +3,110 @@
 Issues closed in the 5.x development cycle
 ==========================================
 
+
+Issues closed in 5.4
+--------------------
+
+GitHub stats for 2017/02/24 - 2017/05/30 (tag: 5.3.0)
+
+These lists are automatically generated, and may be incomplete or contain duplicates.
+
+We closed 8 issues and merged 43 pull requests.
+The full list can be seen `on GitHub <https://github.com/ipython/ipython/issues?q=milestone%3A5.4+>`__
+
+The following 11 authors contributed 64 commits.
+
+* Benjamin Ragan-Kelley
+* Carol Willing
+* Kyle Kelley
+* Leo Singer
+* Luke Pfister
+* Lumir Balhar
+* Matthias Bussonnier
+* meeseeksdev[bot]
+* memeplex
+* Thomas Kluyver
+* Ximin Luo
+
+Issues closed in 5.3
+--------------------
+
+GitHub stats for 2017/02/24 - 2017/05/30 (tag: 5.3.0)
+
+These lists are automatically generated, and may be incomplete or contain duplicates.
+
+We closed 6 issues and merged 28 pull requests.
+The full list can be seen `on GitHub <https://github.com/ipython/ipython/issues?q=milestone%3A5.3+>`__
+
+The following 11 authors contributed 53 commits.
+
+* Benjamin Ragan-Kelley
+* Carol Willing
+* Justin Jent
+* Kyle Kelley
+* Lumir Balhar
+* Matthias Bussonnier
+* meeseeksdev[bot]
+* Segev Finer
+* Steven Maude
+* Thomas A Caswell
+* Thomas Kluyver
+
+
+Issues closed in 5.2
+--------------------
+
+GitHub stats for 2016/08/13 - 2017/01/29 (tag: 5.1.0)
+
+These lists are automatically generated, and may be incomplete or contain duplicates.
+
+We closed 30 issues and merged 74 pull requests.
+The full list can be seen `on GitHub <https://github.com/ipython/ipython/issues?q=milestone%3A5.2+>`__
+
+The following 40 authors contributed 434 commits.
+
+* Adam Eury
+* anantkaushik89
+* anatoly techtonik
+* Benjamin Ragan-Kelley
+* Bibo Hao
+* Carl Smith
+* Carol Willing
+* Chilaka Ramakrishna
+* Christopher Welborn
+* Denis S. Tereshchenko
+* Diego Garcia
+* fatData
+* Fermi paradox
+* Fernando Perez
+* fuho
+* Hassan Kibirige
+* Jamshed Vesuna
+* Jens Hedegaard Nielsen
+* Jeroen Demeyer
+* kaushikanant
+* Kenneth Hoste
+* Keshav Ramaswamy
+* Kyle Kelley
+* Matteo
+* Matthias Bussonnier
+* mbyt
+* memeplex
+* Moez Bouhlel
+* Pablo Galindo
+* Paul Ivanov
+* pietvo
+* Piotr Przetacznik
+* Rounak Banik
+* sachet-mittal
+* Srinivas Reddy Thatiparthy
+* Tamir Bahar
+* Thomas A Caswell
+* Thomas Kluyver
+* tillahoffmann
+* Yuri Numerov
+
+
 Issues closed in 5.1
 --------------------
 

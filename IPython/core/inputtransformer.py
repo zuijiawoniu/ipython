@@ -6,16 +6,11 @@ This includes the machinery to recognise and transform ``%magic`` commands,
 import abc
 import functools
 import re
+from io import StringIO
 
 from IPython.core.splitinput import LineInfo
 from IPython.utils import tokenize2
-from IPython.utils.py3compat import with_metaclass, PY3
 from IPython.utils.tokenize2 import generate_tokens, untokenize, TokenError
-
-if PY3:
-    from io import StringIO
-else:
-    from StringIO import StringIO
 
 #-----------------------------------------------------------------------------
 # Globals
@@ -42,7 +37,7 @@ ESC_SEQUENCES = [ESC_SHELL, ESC_SH_CAP, ESC_HELP ,\
                  ESC_QUOTE, ESC_QUOTE2, ESC_PAREN ]
 
 
-class InputTransformer(with_metaclass(abc.ABCMeta, object)):
+class InputTransformer(metaclass=abc.ABCMeta):
     """Abstract base class for line-based input transformers."""
     
     @abc.abstractmethod
@@ -125,25 +120,18 @@ class TokenInputTransformer(InputTransformer):
     """
     def __init__(self, func):
         self.func = func
-        self.current_line = ""
-        self.line_used = False
+        self.buf = []
         self.reset_tokenizer()
-    
+
     def reset_tokenizer(self):
-        self.tokenizer = generate_tokens(self.get_line)
-    
-    def get_line(self):
-        if self.line_used:
-            raise TokenError
-        self.line_used = True
-        return self.current_line
-    
+        it = iter(self.buf)
+        self.tokenizer = generate_tokens(it.__next__)
+
     def push(self, line):
-        self.current_line += line + "\n"
-        if self.current_line.isspace():
+        self.buf.append(line + '\n')
+        if all(l.isspace() for l in self.buf):
             return self.reset()
-        
-        self.line_used = False
+
         tokens = []
         stop_at_NL = False
         try:
@@ -163,13 +151,13 @@ class TokenInputTransformer(InputTransformer):
         return self.output(tokens)
     
     def output(self, tokens):
-        self.current_line = ""
+        self.buf.clear()
         self.reset_tokenizer()
         return untokenize(self.func(tokens)).rstrip('\n')
     
     def reset(self):
-        l = self.current_line
-        self.current_line = ""
+        l = ''.join(self.buf)
+        self.buf.clear()
         self.reset_tokenizer()
         if l:
             return l.rstrip('\n')
@@ -210,11 +198,14 @@ def _make_help_call(target, esc, lspace, next_input=None):
                 else 'psearch' if '*' in target \
                 else 'pinfo'
     arg = " ".join([method, target])
+    #Prepare arguments for get_ipython().run_line_magic(magic_name, magic_args)
+    t_magic_name, _, t_magic_arg_s = arg.partition(' ')
+    t_magic_name = t_magic_name.lstrip(ESC_MAGIC)
     if next_input is None:
-        return '%sget_ipython().magic(%r)' % (lspace, arg)
+        return '%sget_ipython().run_line_magic(%r, %r)' % (lspace, t_magic_name, t_magic_arg_s)
     else:
-        return '%sget_ipython().set_next_input(%r);get_ipython().magic(%r)' % \
-           (lspace, next_input, arg)
+        return '%sget_ipython().set_next_input(%r);get_ipython().run_line_magic(%r, %r)' % \
+           (lspace, next_input, t_magic_name, t_magic_arg_s)
     
 # These define the transformations for the different escape characters.
 def _tr_system(line_info):
@@ -237,11 +228,14 @@ def _tr_help(line_info):
 
 def _tr_magic(line_info):
     "Translate lines escaped with: %"
-    tpl = '%sget_ipython().magic(%r)'
+    tpl = '%sget_ipython().run_line_magic(%r, %r)'
     if line_info.line.startswith(ESC_MAGIC2):
         return line_info.line
     cmd = ' '.join([line_info.ifun, line_info.the_rest]).strip()
-    return tpl % (line_info.pre, cmd)
+    #Prepare arguments for get_ipython().run_line_magic(magic_name, magic_args)
+    t_magic_name, _, t_magic_arg_s = cmd.partition(' ')
+    t_magic_name = t_magic_name.lstrip(ESC_MAGIC)
+    return tpl % (line_info.pre, t_magic_name, t_magic_arg_s)
 
 def _tr_quote(line_info):
     "Translate lines escaped with: ,"
@@ -526,12 +520,15 @@ def assign_from_system(line):
     return assign_system_template % m.group('lhs', 'cmd')
 
 assign_magic_re = re.compile(r'{}%\s*(?P<cmd>.*)'.format(_assign_pat), re.VERBOSE)
-assign_magic_template = '%s = get_ipython().magic(%r)'
+assign_magic_template = '%s = get_ipython().run_line_magic(%r, %r)'
 @StatelessInputTransformer.wrap
 def assign_from_magic(line):
     """Transform assignment from magic commands (e.g. a = %who_ls)"""
     m = assign_magic_re.match(line)
     if m is None:
         return line
-    
-    return assign_magic_template % m.group('lhs', 'cmd')
+    #Prepare arguments for get_ipython().run_line_magic(magic_name, magic_args)
+    m_lhs, m_cmd = m.group('lhs', 'cmd')
+    t_magic_name, _, t_magic_arg_s = m_cmd.partition(' ')
+    t_magic_name = t_magic_name.lstrip(ESC_MAGIC)
+    return assign_magic_template % (m_lhs, t_magic_name, t_magic_arg_s)

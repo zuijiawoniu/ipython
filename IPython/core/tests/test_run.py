@@ -20,11 +20,7 @@ import random
 import sys
 import textwrap
 import unittest
-
-try:
-    from unittest.mock import patch
-except ImportError:
-    from mock import patch
+from unittest.mock import patch
 
 import nose.tools as nt
 from nose import SkipTest
@@ -169,8 +165,8 @@ def doctest_reset_del():
 class TestMagicRunPass(tt.TempFileMixin):
 
     def setup(self):
-        """Make a valid python temp file."""
-        self.mktmp('pass\n')
+        content = "a = [1,2,3]\nb = 1"
+        self.mktmp(content)
         
     def run_tmpfile(self):
         _ip = get_ipython()
@@ -216,6 +212,16 @@ class TestMagicRunPass(tt.TempFileMixin):
             _ip.magic('run -d %s' % self.fname)
         with tt.fake_input(['c']):
             _ip.magic('run -d %s' % self.fname)
+
+    def test_run_debug_twice_with_breakpoint(self):
+        """Make a valid python temp file."""
+        _ip = get_ipython()
+        with tt.fake_input(['b 2', 'c', 'c']):
+            _ip.magic('run -d %s' % self.fname)
+
+        with tt.fake_input(['c']):
+            with tt.AssertNotPrints('KeyError'):
+                _ip.magic('run -d %s' % self.fname)
 
 
 class TestMagicRunSimple(tt.TempFileMixin):
@@ -388,7 +394,14 @@ tclass.py: deleting object: C-third
         _ip.magic("run %s" % self.fname)
         
         nt.assert_equal(_ip.user_ns['answer'], 42)
-        
+
+    def test_file_options(self):
+        src = ('import sys\n'
+               'a = " ".join(sys.argv[1:])\n')
+        self.mktmp(src)
+        test_opts = '-x 3 --verbose'
+        _ip.run_line_magic("run", '{0} {1}'.format(self.fname, test_opts))
+        nt.assert_equal(_ip.user_ns['a'], test_opts)
 
 
 class TestMagicRunWithPackage(unittest.TestCase):
@@ -408,7 +421,7 @@ class TestMagicRunWithPackage(unittest.TestCase):
         self.value = int(random.random() * 10000)
 
         self.tempdir = TemporaryDirectory()
-        self.__orig_cwd = py3compat.getcwd()
+        self.__orig_cwd = os.getcwd()
         sys.path.insert(0, self.tempdir.name)
 
         self.writefile(os.path.join(package, '__init__.py'), '')
@@ -420,6 +433,10 @@ class TestMagicRunWithPackage(unittest.TestCase):
         """)
         self.writefile(os.path.join(package, 'absolute.py'), """
         from {0}.sub import x
+        """.format(package))
+        self.writefile(os.path.join(package, 'args.py'), """
+        import sys
+        a = " ".join(sys.argv[1:])
         """.format(package))
 
     def tearDown(self):
@@ -462,6 +479,18 @@ class TestMagicRunWithPackage(unittest.TestCase):
     def test_debug_run_submodule_with_relative_import(self):
         self.check_run_submodule('relative', '-d')
 
+    def test_module_options(self):
+        _ip.user_ns.pop('a', None)
+        test_opts = '-x abc -m test'
+        _ip.run_line_magic('run', '-m {0}.args {1}'.format(self.package, test_opts))
+        nt.assert_equal(_ip.user_ns['a'], test_opts)
+
+    def test_module_options_with_separator(self):
+        _ip.user_ns.pop('a', None)
+        test_opts = '-x abc -m test'
+        _ip.run_line_magic('run', '-m {0}.args -- {1}'.format(self.package, test_opts))
+        nt.assert_equal(_ip.user_ns['a'], test_opts)
+
 def test_run__name__():
     with TemporaryDirectory() as td:
         path = pjoin(td, 'foo.py')
@@ -474,6 +503,10 @@ def test_run__name__():
         
         _ip.magic('run -n {}'.format(path))
         nt.assert_equal(_ip.user_ns.pop('q'), 'foo')
+
+        _ip.magic('run -i -n {}'.format(path))
+        nt.assert_equal(_ip.user_ns.pop('q'), 'foo')
+
 
 def test_run_tb():
     """Test traceback offset in %run"""

@@ -15,6 +15,7 @@ import json
 import sys
 import traceback
 import warnings
+from io import StringIO
 
 from decorator import decorator
 
@@ -27,9 +28,6 @@ from traitlets import (
     Bool, Dict, Integer, Unicode, CUnicode, ObjectName, List,
     ForwardDeclaredInstance,
     default, observe,
-)
-from IPython.utils.py3compat import (
-    with_metaclass, string_types, unicode_type,
 )
 
 
@@ -53,12 +51,17 @@ class DisplayFormatter(Configurable):
                 formatter.enabled = True
             else:
                 formatter.enabled = False
-    
+
     ipython_display_formatter = ForwardDeclaredInstance('FormatterABC')
     @default('ipython_display_formatter')
     def _default_formatter(self):
         return IPythonDisplayFormatter(parent=self)
-    
+
+    mimebundle_formatter = ForwardDeclaredInstance('FormatterABC')
+    @default('mimebundle_formatter')
+    def _default_mime_formatter(self):
+        return MimeBundleFormatter(parent=self)
+
     # A dict of formatter whose keys are format types (MIME types) and whose
     # values are subclasses of BaseFormatter.
     formatters = Dict()
@@ -88,7 +91,7 @@ class DisplayFormatter(Configurable):
 
         By default all format types will be computed.
 
-        The following MIME types are currently implemented:
+        The following MIME types are usually implemented:
 
         * text/plain
         * text/html
@@ -105,14 +108,15 @@ class DisplayFormatter(Configurable):
         ----------
         obj : object
             The Python object whose format data will be computed.
-        include : list or tuple, optional
+        include : list, tuple or set; optional
             A list of format type strings (MIME types) to include in the
             format data dict. If this is set *only* the format types included
             in this list will be computed.
-        exclude : list or tuple, optional
+        exclude : list, tuple or set; optional
             A list of format type string (MIME types) to exclude in the format
             data dict. If this is set all format types will be computed,
             except for those included in this argument.
+            Mimetypes present in exclude will take precedence over the ones in include
 
         Returns
         -------
@@ -126,6 +130,15 @@ class DisplayFormatter(Configurable):
             
             metadata_dict is a dictionary of metadata about each mime-type output.
             Its keys will be a strict subset of the keys in format_dict.
+
+        Notes
+        -----
+
+            If an object implement `_repr_mimebundle_` as well as various
+            `_repr_*_`, the data returned by `_repr_mimebundle_` will take
+            precedence and the corresponding `_repr_*_` for this mimetype will
+            not be called.
+
         """
         format_dict = {}
         md_dict = {}
@@ -133,8 +146,21 @@ class DisplayFormatter(Configurable):
         if self.ipython_display_formatter(obj):
             # object handled itself, don't proceed
             return {}, {}
-        
+
+        format_dict, md_dict = self.mimebundle_formatter(obj, include=include, exclude=exclude)
+
+        if format_dict or md_dict:
+            if include:
+                format_dict = {k:v for k,v in format_dict.items() if k in include}
+                md_dict = {k:v for k,v in md_dict.items() if k in include}
+            if exclude:
+                format_dict = {k:v for k,v in format_dict.items() if k not in exclude}
+                md_dict = {k:v for k,v in md_dict.items() if k not in exclude}
+
         for format_type, formatter in self.formatters.items():
+            if format_type in format_dict:
+                # already got it from mimebundle, don't render again
+                continue
             if include and format_type not in include:
                 continue
             if exclude and format_type in exclude:
@@ -155,7 +181,6 @@ class DisplayFormatter(Configurable):
                 format_dict[format_type] = data
             if md is not None:
                 md_dict[format_type] = md
-            
         return format_dict, md_dict
 
     @property
@@ -202,7 +227,7 @@ def catch_format_error(method, self, *args, **kwargs):
     return self._check_return(r, args[0])
 
 
-class FormatterABC(with_metaclass(abc.ABCMeta, object)):
+class FormatterABC(metaclass=abc.ABCMeta):
     """ Abstract base class for Formatters.
 
     A formatter is a callable class that is responsible for computing the
@@ -276,7 +301,7 @@ class BaseFormatter(Configurable):
     """
 
     format_type = Unicode('text/plain')
-    _return_type = string_types
+    _return_type = str
 
     enabled = Bool(True).tag(config=True)
 
@@ -376,7 +401,7 @@ class BaseFormatter(Configurable):
         ------
         KeyError if the type has not been registered.
         """
-        if isinstance(typ, string_types):
+        if isinstance(typ, str):
             typ_key = tuple(typ.rsplit('.',1))
             if typ_key not in self.deferred_printers:
                 # We may have it cached in the type map. We will have to
@@ -419,7 +444,7 @@ class BaseFormatter(Configurable):
             this will be the previous value (to enable restoring later).
         """
         # if string given, interpret as 'pkg.module.class_name'
-        if isinstance(typ, string_types):
+        if isinstance(typ, str):
             type_module, type_name = typ.rsplit('.', 1)
             return self.for_type_by_name(type_module, type_name, func)
         
@@ -491,7 +516,7 @@ class BaseFormatter(Configurable):
         KeyError if the type is not registered and default is not specified.
         """
         
-        if isinstance(typ, string_types):
+        if isinstance(typ, str):
             typ_key = tuple(typ.rsplit('.',1))
             if typ_key not in self.deferred_printers:
                 # We may have it cached in the type map. We will have to
@@ -658,11 +683,7 @@ class PlainTextFormatter(BaseFormatter):
         if not self.pprint:
             return repr(obj)
         else:
-            # handle str and unicode on Python 2
-            # io.StringIO only accepts unicode,
-            # cStringIO doesn't handle unicode on py2,
-            # StringIO allows str, unicode but only ascii str
-            stream = pretty.CUnicodeIO()
+            stream = StringIO()
             printer = pretty.RepresentationPrinter(stream, self.verbose,
                 self.max_width, self.newline,
                 max_seq_length=self.max_seq_length,
@@ -737,7 +758,7 @@ class PNGFormatter(BaseFormatter):
 
     print_method = ObjectName('_repr_png_')
     
-    _return_type = (bytes, unicode_type)
+    _return_type = (bytes, str)
 
 
 class JPEGFormatter(BaseFormatter):
@@ -755,7 +776,7 @@ class JPEGFormatter(BaseFormatter):
 
     print_method = ObjectName('_repr_jpeg_')
 
-    _return_type = (bytes, unicode_type)
+    _return_type = (bytes, str)
 
 
 class LatexFormatter(BaseFormatter):
@@ -804,7 +825,7 @@ class JSONFormatter(BaseFormatter):
             r, md = r
         
         # handle deprecated JSON-as-string form from IPython < 3
-        if isinstance(r, string_types):
+        if isinstance(r, str):
             warnings.warn("JSON expects JSONable list/dict containers, not JSON strings",
             FormatterWarning)
             r = json.loads(r)
@@ -846,10 +867,10 @@ class PDFFormatter(BaseFormatter):
 
     print_method = ObjectName('_repr_pdf_')
 
-    _return_type = (bytes, unicode_type)
+    _return_type = (bytes, str)
 
 class IPythonDisplayFormatter(BaseFormatter):
-    """A Formatter for objects that know how to display themselves.
+    """An escape-hatch Formatter for objects that know how to display themselves.
     
     To define the callables that compute the representation of your
     objects, define a :meth:`_ipython_display_` method or use the :meth:`for_type`
@@ -859,10 +880,16 @@ class IPythonDisplayFormatter(BaseFormatter):
     
     This display formatter has highest priority.
     If it fires, no other display formatter will be called.
+
+    Prior to IPython 6.1, `_ipython_display_` was the only way to display custom mime-types
+    without registering a new Formatter.
+    
+    IPython 6.1 introduces `_repr_mimebundle_` for displaying custom mime-types,
+    so `_ipython_display_` should only be used for objects that require unusual
+    display patterns, such as multiple display calls.
     """
     print_method = ObjectName('_ipython_display_')
     _return_type = (type(None), bool)
-    
 
     @catch_format_error
     def __call__(self, obj):
@@ -883,6 +910,63 @@ class IPythonDisplayFormatter(BaseFormatter):
                 return True
 
 
+class MimeBundleFormatter(BaseFormatter):
+    """A Formatter for arbitrary mime-types.
+
+    Unlike other `_repr_<mimetype>_` methods,
+    `_repr_mimebundle_` should return mime-bundle data,
+    either the mime-keyed `data` dictionary or the tuple `(data, metadata)`.
+    Any mime-type is valid.
+
+    To define the callables that compute the mime-bundle representation of your
+    objects, define a :meth:`_repr_mimebundle_` method or use the :meth:`for_type`
+    or :meth:`for_type_by_name` methods to register functions that handle
+    this.
+
+    .. versionadded:: 6.1
+    """
+    print_method = ObjectName('_repr_mimebundle_')
+    _return_type = dict
+    
+    def _check_return(self, r, obj):
+        r = super(MimeBundleFormatter, self)._check_return(r, obj)
+        # always return (data, metadata):
+        if r is None:
+            return {}, {}
+        if not isinstance(r, tuple):
+            return r, {}
+        return r
+
+    @catch_format_error
+    def __call__(self, obj, include=None, exclude=None):
+        """Compute the format for an object.
+
+        Identical to parent's method but we pass extra parameters to the method.
+
+        Unlike other _repr_*_ `_repr_mimebundle_` should allow extra kwargs, in
+        particular `include` and `exclude`.
+        """
+        if self.enabled:
+            # lookup registered printer
+            try:
+                printer = self.lookup(obj)
+            except KeyError:
+                pass
+            else:
+                return printer(obj)
+            # Finally look for special method names
+            method = get_real_method(obj, self.print_method)
+
+            if method is not None:
+                d = {}
+                d['include'] = include
+                d['exclude'] = exclude
+                return method(**d)
+            return None
+        else:
+            return None
+
+
 FormatterABC.register(BaseFormatter)
 FormatterABC.register(PlainTextFormatter)
 FormatterABC.register(HTMLFormatter)
@@ -895,6 +979,7 @@ FormatterABC.register(LatexFormatter)
 FormatterABC.register(JSONFormatter)
 FormatterABC.register(JavascriptFormatter)
 FormatterABC.register(IPythonDisplayFormatter)
+FormatterABC.register(MimeBundleFormatter)
 
 
 def format_display_data(obj, include=None, exclude=None):
@@ -944,4 +1029,3 @@ def format_display_data(obj, include=None, exclude=None):
         include,
         exclude
     )
-

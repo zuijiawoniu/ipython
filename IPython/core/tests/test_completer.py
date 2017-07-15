@@ -6,6 +6,7 @@
 
 import os
 import sys
+import textwrap
 import unittest
 
 from contextlib import contextmanager
@@ -18,8 +19,11 @@ from IPython.core import completer
 from IPython.external.decorators import knownfailureif
 from IPython.utils.tempdir import TemporaryDirectory, TemporaryWorkingDirectory
 from IPython.utils.generics import complete_object
-from IPython.utils.py3compat import string_types, unicode_type
 from IPython.testing import decorators as dec
+
+from IPython.core.completer import (
+    Completion, provisionalcompleter, match_dict_keys, _deduplicate_completions)
+from nose.tools import assert_in, assert_not_in
 
 #-----------------------------------------------------------------------------
 # Test functions
@@ -102,7 +106,7 @@ def test_line_split():
     check_line_split(sp, t)
     # Ensure splitting works OK with unicode by re-running the tests with
     # all inputs turned into unicode
-    check_line_split(sp, [ map(unicode_type, p) for p in t] )
+    check_line_split(sp, [ map(str, p) for p in t] )
 
 
 def test_custom_completion_error():
@@ -123,13 +127,13 @@ def test_unicode_completions():
     # Some strings that trigger different types of completion.  Check them both
     # in str and unicode forms
     s = ['ru', '%ru', 'cd /', 'floa', 'float(x)/']
-    for t in s + list(map(unicode_type, s)):
+    for t in s + list(map(str, s)):
         # We don't need to check exact completion values (they may change
         # depending on the state of the namespace, but at least no exceptions
         # should be thrown and the return value should be a pair of text, list
         # values.
         text, matches = ip.complete(t)
-        nt.assert_true(isinstance(text, string_types))
+        nt.assert_true(isinstance(text, str))
         nt.assert_true(isinstance(matches, list))
 
 def test_latex_completions():
@@ -145,8 +149,8 @@ def test_latex_completions():
         nt.assert_equal(matches[0], latex_symbols[k])
     # Test a more complex line
     text, matches = ip.complete(u'print(\\alpha')
-    nt.assert_equals(text, u'\\alpha')
-    nt.assert_equals(matches[0], latex_symbols['\\alpha'])
+    nt.assert_equal(text, u'\\alpha')
+    nt.assert_equal(matches[0], latex_symbols['\\alpha'])
     # Test multiple matching latex symbols
     text, matches = ip.complete(u'\\al')
     nt.assert_in('\\alpha', matches)
@@ -270,23 +274,123 @@ def test_local_file_completions():
         nt.assert_true(comp.issubset(set(c)))
 
 
+def test_quoted_file_completions():
+    ip = get_ipython()
+    with TemporaryWorkingDirectory():
+        name = "foo'bar"
+        open(name, 'w').close()
+
+        # Don't escape Windows
+        escaped = name if sys.platform == "win32" else "foo\\'bar"
+
+        # Single quote matches embedded single quote
+        text = "open('foo"
+        c = ip.Completer._complete(cursor_line=0,
+                                   cursor_pos=len(text),
+                                   full_text=text)[1]
+        nt.assert_equal(c, [escaped])
+
+        # Double quote requires no escape
+        text = 'open("foo'
+        c = ip.Completer._complete(cursor_line=0,
+                                   cursor_pos=len(text),
+                                   full_text=text)[1]
+        nt.assert_equal(c, [name])
+
+        # No quote requires an escape
+        text = '%ls foo'
+        c = ip.Completer._complete(cursor_line=0,
+                                   cursor_pos=len(text),
+                                   full_text=text)[1]
+        nt.assert_equal(c, [escaped])
+
+
+def test_jedi():
+    """
+    A couple of issue we had with Jedi
+    """
+    ip = get_ipython()
+
+    def _test_complete(reason, s, comp, start=None, end=None):
+        l = len(s)
+        start = start if start is not None else l
+        end = end if end is not None else l
+        with provisionalcompleter():
+            completions = set(ip.Completer.completions(s, l))
+            assert_in(Completion(start, end, comp), completions, reason)
+
+    def _test_not_complete(reason, s, comp):
+        l = len(s)
+        with provisionalcompleter():
+            completions = set(ip.Completer.completions(s, l))
+            assert_not_in(Completion(l, l, comp), completions, reason)
+
+    import jedi
+    jedi_version = tuple(int(i) for i in jedi.__version__.split('.')[:3])
+    if jedi_version > (0, 10):
+        yield _test_complete, 'jedi >0.9 should complete and not crash', 'a=1;a.', 'real'
+    yield _test_complete, 'can infer first argument', 'a=(1,"foo");a[0].', 'real'
+    yield _test_complete, 'can infer second argument', 'a=(1,"foo");a[1].', 'capitalize'
+    yield _test_complete, 'cover duplicate completions', 'im', 'import', 0, 2
+
+    yield _test_not_complete, 'does not mix types', 'a=(1,"foo");a[0].', 'capitalize'
+
+def test_completion_have_signature():
+    """
+    Lets make sure jedi is capable of pulling out the signature of the function we are completing.
+    """
+    ip = get_ipython()
+    with provisionalcompleter():
+        completions = ip.Completer.completions('ope', 3)
+        c = next(completions)  # should be `open`
+    assert 'file' in c.signature, "Signature of function was not found by completer"
+    assert 'encoding' in c.signature, "Signature of function was not found by completer"
+
+
+def test_deduplicate_completions():
+    """
+    Test that completions are correctly deduplicated (even if ranges are not the same)
+    """
+    ip = get_ipython()
+    ip.ex(textwrap.dedent('''
+    class Z:
+        zoo = 1
+    '''))
+    with provisionalcompleter():
+        l = list(_deduplicate_completions('Z.z', ip.Completer.completions('Z.z', 3)))
+
+    assert len(l) == 1, 'Completions (Z.z<tab>) correctly deduplicate: %s ' % l
+    assert l[0].text == 'zoo'  # and not `it.accumulate`
+
+
 def test_greedy_completions():
+    """
+    Test the capability of the Greedy completer. 
+
+    Most of the test here do not really show off the greedy completer, for proof
+    each of the text bellow now pass with Jedi. The greedy completer is capable of more. 
+
+    See the :any:`test_dict_key_completion_contexts`
+
+    """
     ip = get_ipython()
     ip.ex('a=list(range(5))')
     _,c = ip.complete('.',line='a[0].')
     nt.assert_false('.real' in c,
                     "Shouldn't have completed on a[0]: %s"%c)
-    with greedy_completion():
-        def _(line, cursor_pos, expect, message):
+    with greedy_completion(), provisionalcompleter():
+        def _(line, cursor_pos, expect, message, completion):
             _,c = ip.complete('.', line=line, cursor_pos=cursor_pos)
+            with provisionalcompleter():
+                completions = ip.Completer.completions(line, cursor_pos)
             nt.assert_in(expect, c, message%c)
+            nt.assert_in(completion, completions)
 
-        yield _, 'a[0].', 5, 'a[0].real', "Should have completed on a[0].: %s"
-        yield _, 'a[0].r', 6, 'a[0].real', "Should have completed on a[0].r: %s"
-        
-        if sys.version_info > (3,4):
-            yield _, 'a[0].from_', 10, 'a[0].from_bytes', "Should have completed on a[0].from_: %s"
+        yield _, 'a[0].', 5, 'a[0].real', "Should have completed on a[0].: %s", Completion(5,5, 'real')
+        yield _, 'a[0].r', 6, 'a[0].real', "Should have completed on a[0].r: %s", Completion(5,6, 'real')
 
+        if sys.version_info > (3, 4):
+            yield _, 'a[0].from_', 10, 'a[0].from_bytes', "Should have completed on a[0].from_: %s", Completion(5, 10, 'from_bytes')
 
 
 def test_omit__names():
@@ -299,27 +403,58 @@ def test_omit__names():
     cfg = Config()
     cfg.IPCompleter.omit__names = 0
     c.update_config(cfg)
-    s,matches = c.complete('ip.')
-    nt.assert_in('ip.__str__', matches)
-    nt.assert_in('ip._hidden_attr', matches)
+    with provisionalcompleter():
+        s,matches = c.complete('ip.')
+        completions = set(c.completions('ip.', 3))
+
+        nt.assert_in('ip.__str__', matches)
+        nt.assert_in(Completion(3, 3, '__str__'), completions)
+        
+        nt.assert_in('ip._hidden_attr', matches)
+        nt.assert_in(Completion(3,3, "_hidden_attr"), completions)
+
+
     cfg = Config()
     cfg.IPCompleter.omit__names = 1
     c.update_config(cfg)
-    s,matches = c.complete('ip.')
-    nt.assert_not_in('ip.__str__', matches)
-    nt.assert_in('ip._hidden_attr', matches)
+    with provisionalcompleter():
+        s,matches = c.complete('ip.')
+        completions = set(c.completions('ip.', 3))
+
+        nt.assert_not_in('ip.__str__', matches)
+        nt.assert_not_in(Completion(3,3,'__str__'), completions)
+
+        # nt.assert_in('ip._hidden_attr', matches)
+        nt.assert_in(Completion(3,3, "_hidden_attr"), completions)
+
     cfg = Config()
     cfg.IPCompleter.omit__names = 2
     c.update_config(cfg)
-    s,matches = c.complete('ip.')
-    nt.assert_not_in('ip.__str__', matches)
-    nt.assert_not_in('ip._hidden_attr', matches)
-    s,matches = c.complete('ip._x.')
-    nt.assert_in('ip._x.keys', matches)
+    with provisionalcompleter():
+        s,matches = c.complete('ip.')
+        completions = set(c.completions('ip.', 3))
+
+        nt.assert_not_in('ip.__str__', matches)
+        nt.assert_not_in(Completion(3,3,'__str__'), completions)
+
+        nt.assert_not_in('ip._hidden_attr', matches)
+        nt.assert_not_in(Completion(3,3, "_hidden_attr"), completions)
+
+    with provisionalcompleter():
+        s,matches = c.complete('ip._x.')
+        completions = set(c.completions('ip._x.', 6))
+
+        nt.assert_in('ip._x.keys', matches)
+        nt.assert_in(Completion(6,6, "keys"), completions)
+
     del ip._hidden_attr
+    del ip._x
 
 
 def test_limit_to__all__False_ok():
+    """
+    Limit to all is deprecated, once we remove it this test can go away. 
+    """
     ip = get_ipython()
     c = ip.Completer
     ip.ex('class D: x=24')
@@ -427,31 +562,102 @@ def test_line_cell_magics():
 
 
 def test_magic_completion_order():
-
     ip = get_ipython()
     c = ip.Completer
 
-    # Test ordering of magics and non-magics with the same name
-    # We want the non-magic first
+    # Test ordering of line and cell magics.
+    text, matches = c.complete("timeit")
+    nt.assert_equal(matches, ["%timeit", "%%timeit"])
 
-    # Before importing matplotlib, there should only be one option:
 
-    text, matches = c.complete('mat')
+def test_magic_completion_shadowing():
+    ip = get_ipython()
+    c = ip.Completer
+
+    # Before importing matplotlib, %matplotlib magic should be the only option.
+    text, matches = c.complete("mat")
+    nt.assert_equal(matches, ["%matplotlib"])
+
+    # The newly introduced name should shadow the magic.
+    ip.run_cell("matplotlib = 1")
+    text, matches = c.complete("mat")
+    nt.assert_equal(matches, ["matplotlib"])
+
+    # After removing matplotlib from namespace, the magic should again be
+    # the only option.
+    del ip.user_ns["matplotlib"]
+    text, matches = c.complete("mat")
     nt.assert_equal(matches, ["%matplotlib"])
 
 
-    ip.run_cell("matplotlib = 1")  # introduce name into namespace
+def test_magic_config():
+    ip = get_ipython()
+    c = ip.Completer
 
-    # After the import, there should be two options, ordered like this:
-    text, matches = c.complete('mat')
-    nt.assert_equal(matches, ["matplotlib", "%matplotlib"])
+    s, matches = c.complete(None, 'conf')
+    nt.assert_in('%config', matches)
+    s, matches = c.complete(None, 'conf')
+    nt.assert_not_in('AliasManager', matches)
+    s, matches = c.complete(None, 'config ')
+    nt.assert_in('AliasManager', matches)
+    s, matches = c.complete(None, '%config ')
+    nt.assert_in('AliasManager', matches)
+    s, matches = c.complete(None, 'config Ali')
+    nt.assert_list_equal(['AliasManager'], matches)
+    s, matches = c.complete(None, '%config Ali')
+    nt.assert_list_equal(['AliasManager'], matches)
+    s, matches = c.complete(None, 'config AliasManager')
+    nt.assert_list_equal(['AliasManager'], matches)
+    s, matches = c.complete(None, '%config AliasManager')
+    nt.assert_list_equal(['AliasManager'], matches)
+    s, matches = c.complete(None, 'config AliasManager.')
+    nt.assert_in('AliasManager.default_aliases', matches)
+    s, matches = c.complete(None, '%config AliasManager.')
+    nt.assert_in('AliasManager.default_aliases', matches)
+    s, matches = c.complete(None, 'config AliasManager.de')
+    nt.assert_list_equal(['AliasManager.default_aliases'], matches)
+    s, matches = c.complete(None, 'config AliasManager.de')
+    nt.assert_list_equal(['AliasManager.default_aliases'], matches)
 
 
-    ip.run_cell("timeit = 1")  # define a user variable called 'timeit'
+def test_magic_color():
+    ip = get_ipython()
+    c = ip.Completer
 
-    # Order of user variable and line and cell magics with same name:
-    text, matches = c.complete('timeit')
-    nt.assert_equal(matches, ["timeit", "%timeit","%%timeit"])
+    s, matches = c.complete(None, 'colo')
+    nt.assert_in('%colors', matches)
+    s, matches = c.complete(None, 'colo')
+    nt.assert_not_in('NoColor', matches)
+    s, matches = c.complete(None, 'colors ')
+    nt.assert_in('NoColor', matches)
+    s, matches = c.complete(None, '%colors ')
+    nt.assert_in('NoColor', matches)
+    s, matches = c.complete(None, 'colors NoCo')
+    nt.assert_list_equal(['NoColor'], matches)
+    s, matches = c.complete(None, '%colors NoCo')
+    nt.assert_list_equal(['NoColor'], matches)
+
+
+def test_match_dict_keys():
+    """
+    Test that match_dict_keys works on a couple of use case does return what
+    expected, and does not crash
+    """
+    delims = ' \t\n`!@#$^&*()=+[{]}\\|;:\'",<>?'
+
+
+    keys = ['foo', b'far']
+    assert match_dict_keys(keys, "b'", delims=delims)  == ("'", 2 ,['far'])
+    assert match_dict_keys(keys, "b'f", delims=delims) == ("'", 2 ,['far'])
+    assert match_dict_keys(keys, 'b"', delims=delims)  == ('"', 2 ,['far'])
+    assert match_dict_keys(keys, 'b"f', delims=delims) == ('"', 2 ,['far'])
+
+    assert match_dict_keys(keys, "'", delims=delims)  == ("'", 1 ,['foo'])
+    assert match_dict_keys(keys, "'f", delims=delims) == ("'", 1 ,['foo'])
+    assert match_dict_keys(keys, '"', delims=delims)  == ('"', 1 ,['foo'])
+    assert match_dict_keys(keys, '"f', delims=delims) == ('"', 1 ,['foo'])
+    
+    match_dict_keys
 
 
 def test_dict_key_completion_string():
@@ -713,6 +919,14 @@ def test_object_key_completion():
     nt.assert_in('qwick', matches)
 
 
+def test_tryimport():
+    """
+    Test that try-import don't crash on trailing dot, and import modules before
+    """
+    from IPython.core.completerlib import try_import
+    assert(try_import("IPython."))
+
+
 def test_aimport_module_completer():
     ip = get_ipython()
     _, matches = ip.complete('i', '%aimport i')
@@ -737,3 +951,11 @@ def test_from_module_completer():
     _, matches = ip.complete('B', 'from io import B', 16)
     nt.assert_in('BytesIO', matches)
     nt.assert_not_in('BaseException', matches)
+
+def test_snake_case_completion():
+    ip = get_ipython()
+    ip.user_ns['some_three'] = 3
+    ip.user_ns['some_four'] = 4
+    _, matches = ip.complete("s_", "print(s_f")
+    nt.assert_in('some_three', matches)
+    nt.assert_in('some_four', matches)

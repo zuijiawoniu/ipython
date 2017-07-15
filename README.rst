@@ -1,15 +1,17 @@
 .. image:: https://codecov.io/github/ipython/ipython/coverage.svg?branch=master
     :target: https://codecov.io/github/ipython/ipython?branch=master
 
-.. image:: https://img.shields.io/pypi/dm/IPython.svg           
+.. image:: https://img.shields.io/pypi/dm/IPython.svg
     :target: https://pypi.python.org/pypi/ipython
 
-.. image:: https://img.shields.io/pypi/v/IPython.svg            
+.. image:: https://img.shields.io/pypi/v/IPython.svg
     :target: https://pypi.python.org/pypi/ipython
 
-.. image:: https://img.shields.io/travis/ipython/ipython.svg    
+.. image:: https://img.shields.io/travis/ipython/ipython.svg
     :target: https://travis-ci.org/ipython/ipython
 
+.. image:: https://www.codetriage.com/ipython/ipython/badges/users.svg
+    :target: https://www.codetriage.com/ipython/ipython/
 
 ===========================================
  IPython: Productive Interactive Computing
@@ -22,8 +24,14 @@ Welcome to IPython.  Our full documentation is available on `ipython.readthedocs
 <https://ipython.readthedocs.io/en/stable/>`_ and contains information on how to install, use and
 contribute to the project.
 
-Officially, IPython requires Python version 3.3 and above.
-IPython 5.x is the last IPython version to support Python 2.7.
+**IPython versions and Python Support**
+
+**IPython 6** requires Python version 3.3 and above.
+
+**IPython 5.x LTS** is the compatible release for Python 2.7.
+If you require Python 2 support, you **must** use IPython 5.x LTS. Please
+update your project configurations and requirements as necessary.
+
 
 The Notebook, Qt console and a number of other pieces are now parts of *Jupyter*.
 See the `Jupyter installation docs <http://jupyter.readthedocs.io/en/latest/install.html>`__
@@ -74,7 +82,7 @@ check the version of pip with
 
   $ pip --version
 
-You will need to update pip to the version 8.2 or greater. If you are not using
+You will need to update pip to the version 9.0.1 or greater. If you are not using
 pip, please inquiry with the maintainers of the package for your package
 manager.
 
@@ -85,3 +93,20 @@ For more information see one of our blog posts:
 As well as the following Pull-Request for discussion:
 
     https://github.com/ipython/ipython/pull/9900
+
+This error does also occur if you are invoking ``setup.py`` directly – which you
+should not – or are using ``easy_install`` If this is the case, use ``pip
+install .`` (instead of ``setup.py install`` , and ``pip install -e .`` instead
+of ``setup.py develop`` If you are depending on IPython as a dependency you may
+also want to have a conditional dependency on IPython depending on the Python
+version::
+
+    install_req = ['ipython']
+    if sys.version_info[0] < 3 and 'bdist_wheel' not in sys.argv:
+        install_req.remove('ipython')
+        install_req.append('ipython<6')
+
+    setup(
+        ...
+        install_requires=install_req
+    )

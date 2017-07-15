@@ -21,7 +21,6 @@ from traitlets.config.configurable import LoggingConfigurable
 from decorator import decorator
 from IPython.utils.decorators import undoc
 from IPython.utils.path import locate_profile
-from IPython.utils import py3compat
 from traitlets import (
     Any, Bool, Dict, Instance, Integer, List, Unicode, TraitError,
     default, observe,
@@ -487,7 +486,7 @@ class HistoryManager(HistoryAccessor):
     @default('dir_hist')
     def _dir_hist_default(self):
         try:
-            return [py3compat.getcwd()]
+            return [os.getcwd()]
         except OSError:
             return []
 
@@ -514,10 +513,7 @@ class HistoryManager(HistoryAccessor):
     # History saving in separate thread
     save_thread = Instance('IPython.core.history.HistorySavingThread',
                            allow_none=True)
-    try:               # Event is a function returning an instance of _Event...
-        save_flag = Instance(threading._Event, allow_none=True)
-    except AttributeError:         # ...until Python 3.3, when it's a class.
-        save_flag = Instance(threading.Event, allow_none=True)
+    save_flag = Instance(threading.Event, allow_none=True)
     
     # Private interface
     # Variables used to store the three last inputs from the user.  On each new
@@ -593,7 +589,7 @@ class HistoryManager(HistoryAccessor):
         optionally open a new session."""
         self.output_hist.clear()
         # The directory history can't be completely empty
-        self.dir_hist[:] = [py3compat.getcwd()]
+        self.dir_hist[:] = [os.getcwd()]
         
         if new_session:
             if self.session_number:

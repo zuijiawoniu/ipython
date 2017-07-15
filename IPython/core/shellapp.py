@@ -8,14 +8,15 @@ launch InteractiveShell instances, load extensions, etc.
 # Distributed under the terms of the Modified BSD License.
 
 import glob
+from itertools import chain
 import os
 import sys
 
 from traitlets.config.application import boolean_flag
 from traitlets.config.configurable import Configurable
 from traitlets.config.loader import Config
+from IPython.core.application import SYSTEM_CONFIG_DIRS, ENV_CONFIG_DIRS
 from IPython.core import pylabtools
-from IPython.utils import py3compat
 from IPython.utils.contexts import preserve_keys
 from IPython.utils.path import filefind
 from traitlets import (
@@ -303,9 +304,6 @@ class InteractiveShellApp(Configurable):
         # were run from a system shell.
         save_argv = sys.argv
         sys.argv = [full_filename] + self.extra_args[1:]
-        # protect sys.argv from potential unicode strings on Python 2:
-        if not py3compat.PY3:
-            sys.argv = [ py3compat.cast_bytes(a) for a in sys.argv ]
         try:
             if os.path.isfile(full_filename):
                 self.log.info("Running file in user namespace: %s" %
@@ -328,7 +326,9 @@ class InteractiveShellApp(Configurable):
 
     def _run_startup_files(self):
         """Run files from profile startup directory"""
-        startup_dir = self.profile_dir.startup_dir
+        startup_dirs = [self.profile_dir.startup_dir] + [
+            os.path.join(p, 'startup') for p in chain(ENV_CONFIG_DIRS, SYSTEM_CONFIG_DIRS)
+        ]
         startup_files = []
 
         if self.exec_PYTHONSTARTUP and os.environ.get('PYTHONSTARTUP', False) and \
@@ -340,9 +340,9 @@ class InteractiveShellApp(Configurable):
             except:
                 self.log.warning("Unknown error in handling PYTHONSTARTUP file %s:", python_startup)
                 self.shell.showtraceback()
-
-        startup_files += glob.glob(os.path.join(startup_dir, '*.py'))
-        startup_files += glob.glob(os.path.join(startup_dir, '*.ipy'))
+        for startup_dir in startup_dirs[::-1]:
+            startup_files += glob.glob(os.path.join(startup_dir, '*.py'))
+            startup_files += glob.glob(os.path.join(startup_dir, '*.ipy'))
         if not startup_files:
             return
 

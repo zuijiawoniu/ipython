@@ -2,11 +2,163 @@
  5.x Series
 ============
 
+.. _whatsnew540:
+
+IPython 5.4
+===========
+
+IPython 5.4-LTS is the first release of IPython after the release of the 6.x
+series which is Python 3 only. It backports most of the new exposed API
+additions made in IPython 6.0 and 6.1 and avoid having to write conditional
+logics depending of the version of IPython.
+
+Please upgrade to pip 9 or greater before upgrading IPython. 
+Failing to do so on Python 2 may lead to a broken IPython install.
+
+Configurable TerminalInteractiveShell
+-------------------------------------
+
+Backported from the 6.x branch as an exceptional new feature. See
+:ghpull:`10373` and :ghissue:`10364`
+
+IPython gained a new ``c.TerminalIPythonApp.interactive_shell_class`` option
+that allow to customize the class used to start the terminal frontend. This
+should allow user to use custom interfaces, like reviving the former readline
+interface which is now a separate package not maintained by the core team.
+
+
+Define ``_repr_mimebundle_``
+----------------------------
+
+Object can now define `_repr_mimebundle_` in place of multiple `_repr_*_`
+methods and return a full mimebundle. This greatly simplify many implementation
+and allow to publish custom mimetypes (like geojson, plotly, dataframes....).
+See the ``Cutom Display Logic`` example notebook for more informations.
+
+Execution Heuristics
+--------------------
+
+The heuristic for execution in the command line interface is now more biased
+toward executing for single statement. While in IPython 4.x and before a single
+line would be executed when enter is pressed, IPython 5.x would insert a new
+line. For single line statement this is not true anymore and if a single line is
+valid Python, IPython will execute it regardless of the cursor position. Use
+:kbd:`Ctrl-O` to insert a new line. :ghpull:`10489`
+
+
+Implement Display IDs
+---------------------
+
+Implement display id and ability to update a given display. This should greatly
+simplify a lot of code by removing the need for widgets and allow other frontend
+to implement things like progress-bars.  See :ghpull:`10048`
+
+Display function
+----------------
+
+The :func:`display() <IPython.display.display>` function is now available by
+default in an IPython session, meaning users can call it on any object to see
+their rich representation. This should allow for better interactivity both at
+the REPL and in notebook environment.
+
+Scripts and library that rely on display and may be run outside of IPython still
+need to import the display function using ``from IPython.display import
+display``. See :ghpull:`10596`
+
+
+Miscs
+-----
+
+* ``_mp_main_`` is not reloaded which fixes issues with multiprocessing.
+  :ghpull:`10523`
+* Use user colorscheme in Pdb as well :ghpull:`10479`
+* Faster shutdown. :ghpull:`10408` 
+* Fix a crash in reverse search. :ghpull:`10371`
+* added ``Completer.backslash_combining_completions`` boolean option to
+ deactivate backslash-tab completion that may conflict with windows path.
+
+IPython 5.3
+===========
+
+Released on February 24th, 2017. Remarkable changes and fixes:
+
+* Fix a bug in ``set_next_input`` leading to a crash of terminal IPython.
+  :ghpull:`10231`, :ghissue:`10296`, :ghissue:`10229`
+* Always wait for editor inputhook for terminal IPython :ghpull:`10239`,
+  :ghpull:`10240`
+* Disable ``_ipython_display_`` in terminal :ghpull:`10249`, :ghpull:`10274`
+* Update terminal colors to be more visible by default on windows
+  :ghpull:`10260`, :ghpull:`10238`, :ghissue:`10281`
+* Add Ctrl-Z shortcut (suspend) in terminal debugger :ghpull:`10254`,
+  :ghissue:`10273`
+* Indent on new line by looking at the text before the cursor :ghpull:`10264`,
+  :ghpull:`10275`, :ghissue:`9283`
+* Update QtEventloop integration to fix some matplotlib integration issues
+  :ghpull:`10201`, :ghpull:`10311`, :ghissue:`10201`
+* Respect completions display style in terminal debugger :ghpull:`10305`,
+  :ghpull:`10313`
+* Add a config option ``TerminalInteractiveShell.extra_open_editor_shortcuts``
+  to enable extra shortcuts to open the input in an editor. These are :kbd:`v`
+  in vi mode, and :kbd:`C-X C-E` in emacs mode (:ghpull:`10330`).
+  The :kbd:`F2` shortcut is always enabled.
+
+IPython 5.2.2
+=============
+
+* Fix error when starting with ``IPCompleter.limit_to__all__`` configured.
+
+IPython 5.2.1
+=============
+
+* Fix tab completion in the debugger. :ghpull:`10223`
 
 IPython 5.2
 ===========
 
+Released on January 29th, 2017. Remarkable changes and fixes:
+
 * restore IPython's debugger to raise on quit. :ghpull:`10009`
+* The configuration value ``c.TerminalInteractiveShell.highlighting_style`` can
+  now directly take a class argument for custom color style. :ghpull:`9848`
+* Correctly handle matplotlib figures dpi :ghpull:`9868`
+* Deprecate ``-e`` flag for the ``%notebook`` magic that had no effects.
+  :ghpull:`9872`
+* You can now press F2 while typing at a terminal prompt to edit the contents
+  in your favourite terminal editor. Set the :envvar:`EDITOR` environment
+  variable to pick which editor is used. :ghpull:`9929`
+* sdists will now only be ``.tar.gz`` as per upstream PyPI requirements.
+  :ghpull:`9925`
+* :any:`IPython.core.debugger` have gained a ``set_trace()`` method for
+  convenience. :ghpull:`9947`
+* The 'smart command mode' added to the debugger in 5.0 was removed, as more
+  people preferred the previous behaviour. Therefore, debugger commands such as
+  ``c`` will act as debugger commands even when ``c`` is defined as a variable.
+  :ghpull:`10050`
+* Fixes OS X event loop issues at startup, :ghpull:`10150`
+* Deprecate the ``%autoindent`` magic. :ghpull:`10176`
+* Emit a :any:`DeprecationWarning` when setting the deprecated
+  ``limit_to_all`` option of the completer. :ghpull:`10198`
+* The :cellmagic:`capture` magic can now capture the result of a cell (from an
+  expression on the last line), as well as printed and displayed output.
+  :ghpull:`9851`.
+
+
+Changes of behavior to :any:`InteractiveShellEmbed`.
+
+:any:`InteractiveShellEmbed` interactive behavior have changed a bit in between
+5.1 and 5.2. By default ``%kill_embedded`` magic will prevent further invocation
+of the current ``call location`` instead of preventing further invocation of
+the current instance creation location. For most use case this will not change
+much for you, though previous behavior was confusing and less consistent with
+previous IPython versions.
+
+You can now deactivate instances by using ``%kill_embedded --instance`` flag,
+(or ``-i`` in short). The ``%kill_embedded`` magic also gained a
+``--yes``/``-y`` option which skip confirmation step, and  ``-x``/``--exit``
+which also exit the current embedded call without asking for confirmation.
+
+See :ghpull:`10207`.
+
 
 
 IPython 5.1

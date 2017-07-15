@@ -30,7 +30,6 @@ from IPython.core.application import (
 from IPython.core.profiledir import ProfileDir
 from IPython.utils.importstring import import_item
 from IPython.paths import get_ipython_dir, get_ipython_package_dir
-from IPython.utils import py3compat
 from traitlets import Unicode, Bool, Dict, observe
 
 #-----------------------------------------------------------------------------
@@ -180,10 +179,10 @@ class ProfileList(Application):
             print("Available profiles in %s:" % self.ipython_dir)
             self._print_profiles(profiles)
         
-        profiles = list_profiles_in(py3compat.getcwd())
+        profiles = list_profiles_in(os.getcwd())
         if profiles:
             print()
-            print("Available profiles in current directory (%s):" % py3compat.getcwd())
+            print("Available profiles in current directory (%s):" % os.getcwd())
             self._print_profiles(profiles)
         
         print()

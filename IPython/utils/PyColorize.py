@@ -44,17 +44,11 @@ import tokenize
 generate_tokens = tokenize.generate_tokens
 
 from IPython.utils.coloransi import TermColors, InputTermColors ,ColorScheme, ColorSchemeTable
-from IPython.utils.py3compat import PY3
-
 from .colorable import Colorable
-
-if PY3:
-    from io import StringIO
-else:
-    from StringIO import StringIO
+from io import StringIO
 
 #############################################################################
-### Python Source Parser (does Hilighting)
+### Python Source Parser (does Highlighting)
 #############################################################################
 
 _KEYWORD = token.NT_OFFSET + 1

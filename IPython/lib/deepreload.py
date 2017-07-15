@@ -32,14 +32,14 @@ re-implementation of hierarchical module import.
 #  the file COPYING, distributed as part of this software.
 #*****************************************************************************
 
+import builtins as builtin_mod
 from contextlib import contextmanager
 import imp
 import sys
 
 from types import ModuleType
 from warnings import warn
-
-from IPython.utils.py3compat import builtin_mod, builtin_mod_name
+import types
 
 original_import = builtin_mod.__import__
 
@@ -163,6 +163,7 @@ def load_next(mod, altmod, name, buf):
 
     return result, next, buf
 
+
 # Need to keep track of what we've already reloaded to prevent cyclic evil
 found_now = {}
 
@@ -270,6 +271,12 @@ modules_reloading = {}
 
 def deep_reload_hook(m):
     """Replacement for reload()."""
+    # Hardcode this one  as it would raise a NotImplemeentedError from the
+    # bowels of Python and screw up the import machinery after.
+    # unlike other imports the `exclude` list aleady in place is not enough.
+
+    if m is types:
+        return m
     if not isinstance(m, ModuleType):
         raise TypeError("reload() argument must be module")
 
@@ -320,13 +327,10 @@ def deep_reload_hook(m):
     return newm
 
 # Save the original hooks
-try:
-    original_reload = builtin_mod.reload
-except AttributeError:
-    original_reload = imp.reload    # Python 3
+original_reload = imp.reload
 
 # Replacement for reload()
-def reload(module, exclude=('sys', 'os.path', builtin_mod_name, '__main__',
+def reload(module, exclude=('sys', 'os.path', 'builtins', '__main__',
                             'numpy', 'numpy._globals')):
     """Recursively reload all modules used in the given module.  Optionally
     takes a list of modules to exclude from reloading.  The default exclude

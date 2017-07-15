@@ -17,7 +17,7 @@ from warnings import warn
 
 from IPython.utils.decorators import undoc
 from .capture import CapturedIO, capture_output
-from .py3compat import string_types, input, PY3
+from .py3compat import input
 
 @undoc
 class IOStream:
@@ -37,7 +37,12 @@ class IOStream:
         def clone(meth):
             return not hasattr(self, meth) and not meth.startswith('_')
         for meth in filter(clone, dir(stream)):
-            setattr(self, meth, getattr(stream, meth))
+            try:
+                val = getattr(stream, meth)
+            except AttributeError:
+                pass
+            else:
+                setattr(self, meth, val)
 
     def __repr__(self):
         cls = self.__class__
@@ -63,7 +68,7 @@ class IOStream:
     def writelines(self, lines):
         warn('IOStream is deprecated since IPython 5.0, use sys.{stdin,stdout,stderr} instead',
              DeprecationWarning, stacklevel=2)
-        if isinstance(lines, string_types):
+        if isinstance(lines, str):
             lines = [lines]
         for line in lines:
             self.write(line)
@@ -173,6 +178,7 @@ def ask_yes_no(prompt, default=None, interrupt=None):
         except KeyboardInterrupt:
             if interrupt:
                 ans = interrupt
+            print("\r")
         except EOFError:
             if default in answers.keys():
                 ans = default
@@ -207,7 +213,7 @@ def temp_pyfile(src, ext='.py'):
 
 def atomic_writing(*args, **kwargs):
     """DEPRECATED: moved to notebook.services.contents.fileio"""
-    warn("IPython.utils.io.atomic_writing has moved to notebook.services.contents.fileio")
+    warn("IPython.utils.io.atomic_writing has moved to notebook.services.contents.fileio", stacklevel=2)
     from notebook.services.contents.fileio import atomic_writing
     return atomic_writing(*args, **kwargs)
 
@@ -234,6 +240,6 @@ rprinte = raw_print_err
 
 def unicode_std_stream(stream='stdout'):
     """DEPRECATED, moved to nbconvert.utils.io"""
-    warn("IPython.utils.io.unicode_std_stream has moved to nbconvert.utils.io")
+    warn("IPython.utils.io.unicode_std_stream has moved to nbconvert.utils.io", stacklevel=2)
     from nbconvert.utils.io import unicode_std_stream
     return unicode_std_stream(stream)

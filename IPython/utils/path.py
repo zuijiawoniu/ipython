@@ -13,7 +13,6 @@ import shutil
 import random
 import glob
 from warnings import warn
-from hashlib import md5
 
 from IPython.utils.process import system
 from IPython.utils import py3compat
@@ -37,7 +36,7 @@ if sys.platform == 'win32':
         --------
 
         >>> get_long_path_name('c:\\docume~1')
-        u'c:\\\\Documents and Settings'
+        'c:\\\\Documents and Settings'
 
         """
         try:
@@ -87,7 +86,6 @@ def unquote_filename(name, win32=(sys.platform=='win32')):
 def compress_user(path):
     """Reverse of :func:`os.path.expanduser`
     """
-    path = py3compat.unicode_to_str(path, sys.getfilesystemencoding())
     home = os.path.expanduser('~')
     if path.startswith(home):
         path =  "~" + path[len(home):]
@@ -154,11 +152,11 @@ def filefind(filename, path_dirs=None):
 
     if path_dirs is None:
         path_dirs = ("",)
-    elif isinstance(path_dirs, py3compat.string_types):
+    elif isinstance(path_dirs, str):
         path_dirs = (path_dirs,)
 
     for path in path_dirs:
-        if path == '.': path = py3compat.getcwd()
+        if path == '.': path = os.getcwd()
         testname = expand_path(os.path.join(path, filename))
         if os.path.isfile(testname):
             return os.path.abspath(testname)
@@ -366,13 +364,6 @@ def target_update(target,deps,cmd):
     if target_outdated(target,deps):
         system(cmd)
 
-@undoc
-def filehash(path):
-    """Make an MD5 hash of a file, ignoring any differences in line
-    ending characters."""
-    warn("filehash() is deprecated since IPython 4.0", DeprecationWarning, stacklevel=2)
-    with open(path, "rU") as f:
-        return md5(py3compat.str_to_bytes(f.read())).hexdigest()
 
 ENOLINK = 1998
 

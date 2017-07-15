@@ -510,6 +510,12 @@ class AutocallChecker(PrefilterChecker):
         if not oinfo['found']:
             return None
 
+        ignored_funs = ['b', 'f', 'r', 'u', 'br', 'rb', 'fr', 'rf']
+        ifun = line_info.ifun
+        line = line_info.line
+        if ifun.lower() in ignored_funs and (line.startswith(ifun + "'") or line.startswith(ifun + '"')):
+            return None
+
         if callable(oinfo['obj']) \
                and (not self.exclude_regexp.match(line_info.the_rest)) \
                and self.function_name_regexp.match(line_info.ifun):
@@ -583,8 +589,11 @@ class MagicHandler(PrefilterHandler):
         """Execute magic functions."""
         ifun    = line_info.ifun
         the_rest = line_info.the_rest
-        cmd = '%sget_ipython().magic(%r)' % (line_info.pre_whitespace,
-                                                    (ifun + " " + the_rest))
+        #Prepare arguments for get_ipython().run_line_magic(magic_name, magic_args)
+        t_arg_s = ifun + " " + the_rest
+        t_magic_name, _, t_magic_arg_s = t_arg_s.partition(' ')
+        t_magic_name = t_magic_name.lstrip(ESC_MAGIC)
+        cmd = '%sget_ipython().run_line_magic(%r, %r)' % (line_info.pre_whitespace, t_magic_name, t_magic_arg_s)
         return cmd
 
 
@@ -625,7 +634,7 @@ class AutoHandler(PrefilterHandler):
         elif esc == ESC_PAREN:
             newcmd = '%s(%s)' % (ifun,",".join(the_rest.split()))
         else:
-            # Auto-paren.       
+            # Auto-paren.
             if force_auto:
                 # Don't rewrite if it is already a call.
                 do_rewrite = not the_rest.startswith('(')
@@ -646,11 +655,11 @@ class AutoHandler(PrefilterHandler):
                 if the_rest.endswith(';'):
                     newcmd = '%s(%s);' % (ifun.rstrip(),the_rest[:-1])
                 else:
-                    newcmd = '%s(%s)' % (ifun.rstrip(), the_rest)                
+                    newcmd = '%s(%s)' % (ifun.rstrip(), the_rest)
             else:
                 normal_handler = self.prefilter_manager.get_handler_by_name('normal')
                 return normal_handler.handle(line_info)
-        
+
         # Display the rewritten call
         if auto_rewrite:
             self.shell.auto_rewrite_input(newcmd)

@@ -19,6 +19,7 @@ Limitations:
 # Module imports
 
 # From the standard library
+import builtins as builtin_mod
 import doctest
 import inspect
 import logging
@@ -26,6 +27,7 @@ import os
 import re
 import sys
 from importlib import import_module
+from io import StringIO
 
 from testpath import modified_env
 
@@ -43,14 +45,6 @@ from doctest import (REPORTING_FLAGS, REPORT_ONLY_FIRST_FAILURE,
 
 from nose.plugins import doctests, Plugin
 from nose.util import anyp, tolist
-
-# Our own imports
-from IPython.utils.py3compat import builtin_mod, PY3, getcwd
-
-if PY3:
-    from io import StringIO
-else:
-    from StringIO import StringIO
 
 #-----------------------------------------------------------------------------
 # Module globals and other constants
@@ -259,7 +253,7 @@ class DocTestCase(doctests.DocTestCase):
             # Save our current directory and switch out to the one where the
             # test was originally created, in case another doctest did a
             # directory change.  We'll restore this in the finally clause.
-            curdir = getcwd()
+            curdir = os.getcwd()
             #print 'runTest in dir:', self._ori_dir  # dbg
             os.chdir(self._ori_dir)
 

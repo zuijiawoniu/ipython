@@ -12,7 +12,7 @@
 #-----------------------------------------------------------------------------
 
 # Our own packages
-from IPython.core.display import display, Javascript, Latex, SVG, HTML
+from IPython.core.display import display, Javascript, Latex, SVG, HTML, Markdown
 from IPython.core.magic import  (
     Magics, magics_class, cell_magic
 )
@@ -63,3 +63,8 @@ class DisplayMagics(Magics):
     def html(self, line, cell):
         """Render the cell as a block of HTML"""
         display(HTML(cell))
+        
+    @cell_magic    
+    def markdown(self, line, cell):
+        """Render the cell as Markdown text block"""
+        display(Markdown(cell))

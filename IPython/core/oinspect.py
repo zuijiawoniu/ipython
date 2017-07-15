@@ -14,17 +14,14 @@ __all__ = ['Inspector','InspectColors']
 
 # stdlib modules
 import inspect
+from inspect import signature
 import linecache
 import warnings
 import os
 from textwrap import dedent
 import types
 import io as stdlib_io
-
-try:
-    from itertools import izip_longest
-except ImportError:
-    from itertools import zip_longest as izip_longest
+from itertools import zip_longest 
 
 # IPython's own
 from IPython.core import page
@@ -38,9 +35,9 @@ from IPython.utils.path import compress_user
 from IPython.utils.text import indent
 from IPython.utils.wildcard import list_namespace
 from IPython.utils.coloransi import TermColors, ColorScheme, ColorSchemeTable
-from IPython.utils.py3compat import cast_unicode, string_types, PY3
-from IPython.utils.signatures import signature
+from IPython.utils.py3compat import cast_unicode
 from IPython.utils.colorable import Colorable
+from IPython.utils.decorators import undoc
 
 from pygments import highlight
 from pygments.lexers import PythonLexer
@@ -83,7 +80,7 @@ info_fields = ['type_name', 'base_class', 'string_form', 'namespace',
 
 def object_info(**kw):
     """Make an object info dict with all fields present."""
-    infodict = dict(izip_longest(info_fields, [None]))
+    infodict = dict(zip_longest(info_fields, [None]))
     infodict.update(kw)
     return infodict
 
@@ -127,7 +124,7 @@ def getdoc(obj):
         pass
     else:
         # if we get extra info, we add it to the normal docstring.
-        if isinstance(ds, string_types):
+        if isinstance(ds, str):
             return inspect.cleandoc(ds)
     try:
         docstr = inspect.getdoc(obj)
@@ -219,7 +216,7 @@ def getargspec(obj):
     if safe_hasattr(obj, '__call__') and not is_simple_callable(obj):
         obj = obj.__call__
 
-    return inspect.getfullargspec(obj) if PY3 else inspect.getargspec(obj)
+    return inspect.getfullargspec(obj)
 
 
 def format_argspec(argspec):
@@ -231,31 +228,12 @@ def format_argspec(argspec):
     return inspect.formatargspec(argspec['args'], argspec['varargs'],
                                  argspec['varkw'], argspec['defaults'])
 
-
+@undoc
 def call_tip(oinfo, format_call=True):
-    """Extract call tip data from an oinfo dict.
-
-    Parameters
-    ----------
-    oinfo : dict
-
-    format_call : bool, optional
-      If True, the call line is formatted and returned as a string.  If not, a
-      tuple of (name, argspec) is returned.
-
-    Returns
-    -------
-    call_info : None, str or (str, dict) tuple.
-      When format_call is True, the whole call information is formattted as a
-      single string.  Otherwise, the object's name and its argspec dict are
-      returned.  If no call information is available, None is returned.
-
-    docstring : str or None
-      The most relevant docstring for calling purposes is returned, if
-      available.  The priority is: call docstring for callable instances, then
-      constructor docstring for classes, then main object's docstring otherwise
-      (regular functions).
+    """DEPRECATED. Extract call tip data from an oinfo dict.
     """
+    warnings.warn('`call_tip` function is deprecated as of IPython 6.0'
+                  'and will be removed in future versions.', DeprecationWarning, stacklevel=2)
     # Get call definition
     argspec = oinfo.get('argspec')
     if argspec is None:
@@ -374,7 +352,7 @@ class Inspector(Colorable):
 
     def __init__(self, color_table=InspectColors,
                  code_color_table=PyColorize.ANSICodeColors,
-                 scheme='NoColor',
+                 scheme=None,
                  str_detail_level=0,
                  parent=None, config=None):
         super(Inspector, self).__init__(parent=parent, config=config)
@@ -401,8 +379,9 @@ class Inspector(Colorable):
                            self.color_table.active_colors.normal)
 
     def set_active_scheme(self, scheme):
-        self.color_table.set_active_scheme(scheme)
-        self.parser.color_table.set_active_scheme(scheme)
+        if scheme is not None:
+            self.color_table.set_active_scheme(scheme)
+            self.parser.color_table.set_active_scheme(scheme)
 
     def noinfo(self, msg, oname):
         """Generic message when no information is found."""
@@ -425,8 +404,7 @@ class Inspector(Colorable):
 
         if inspect.isclass(obj):
             header = self.__head('Class constructor information:\n')
-        elif (not py3compat.PY3) and type(obj) is types.InstanceType:
-            obj = obj.__call__
+
 
         output = self._getdef(obj,oname)
         if output is None:
@@ -609,7 +587,21 @@ class Inspector(Colorable):
         return bundle
 
     def _get_info(self, obj, oname='', formatter=None, info=None, detail_level=0):
-        """Retrieve an info dict and format it."""
+        """Retrieve an info dict and format it.
+        
+        Parameters
+        ==========
+
+        obj: any
+            Object to inspect and return info from
+        oname: str (default: ''):
+            Name of the variable pointing to `obj`.
+        formatter: callable
+        info:
+            already computed informations
+        detail_level: integer
+            Granularity of detail level, if set to 1, give more informations.
+        """
 
         info = self._info(obj, oname=oname, info=info, detail_level=detail_level)
 
@@ -645,7 +637,7 @@ class Inspector(Colorable):
             # Functions, methods, classes
             append_field(_mime, 'Signature', 'definition', code_formatter)
             append_field(_mime, 'Init signature', 'init_definition', code_formatter)
-            if detail_level > 0:
+            if detail_level > 0 and info['source']:
                 append_field(_mime, 'Source', 'source', code_formatter)
             else:
                 append_field(_mime, 'Docstring', 'docstring', formatter)
@@ -658,13 +650,7 @@ class Inspector(Colorable):
             # General Python objects
             append_field(_mime, 'Signature', 'definition', code_formatter)
             append_field(_mime, 'Call signature', 'call_def', code_formatter)
-            
             append_field(_mime, 'Type', 'type_name')
-
-            # Base class for old-style instances
-            if (not py3compat.PY3) and isinstance(obj, types.InstanceType) and info['base_class']:
-                append_field(_mime, 'Base Class', 'base_class')
-
             append_field(_mime, 'String form', 'string_form')
 
             # Namespace
@@ -676,7 +662,7 @@ class Inspector(Colorable):
             
             # Source or docstring, depending on detail level and whether
             # source found.
-            if detail_level > 0:
+            if detail_level > 0 and info['source']:
                 append_field(_mime, 'Source', 'source', code_formatter)
             else:
                 append_field(_mime, 'Docstring', 'docstring', formatter)
@@ -724,24 +710,31 @@ class Inspector(Colorable):
                       DeprecationWarning, stacklevel=2)
         return self._info(obj, oname=oname, info=info, detail_level=detail_level)
 
-    def _info(self, obj, oname='', info=None, detail_level=0):
+    def _info(self, obj, oname='', info=None, detail_level=0) -> dict:
         """Compute a dict with detailed information about an object.
 
-        Optional arguments:
+        Parameters
+        ==========
 
-        - oname: name of the variable pointing to the object.
+        obj: any
+            An object to find information about
+        oname: str (default: ''):
+            Name of the variable pointing to `obj`.
+        info: (default: None)
+            A struct (dict like with attr access) with some information fields
+            which may have been precomputed already.
+        detail_level: int (default:0)
+            If set to 1, more information is given.
 
-        - info: a structure with some information fields which may have been
-          precomputed already.
+        Returns
+        =======
 
-        - detail_level: if set to 1, more information is given.
+        An object info dict with known fields from `info_fields`.
         """
 
-        obj_type = type(obj)
-
         if info is None:
-            ismagic = 0
-            isalias = 0
+            ismagic = False
+            isalias = False
             ospace = ''
         else:
             ismagic = info.ismagic
@@ -771,17 +764,17 @@ class Inspector(Colorable):
         shalf = int((string_max - 5) / 2)
 
         if ismagic:
-            obj_type_name = 'Magic function'
+            out['type_name'] = 'Magic function'
         elif isalias:
-            obj_type_name = 'System alias'
+            out['type_name'] = 'System alias'
         else:
-            obj_type_name = obj_type.__name__
-        out['type_name'] = obj_type_name
+            out['type_name'] = type(obj).__name__
 
         try:
             bclass = obj.__class__
             out['base_class'] = str(bclass)
-        except: pass
+        except:
+            pass
 
         # String form, but snip if too long in ? form (full in ??)
         if detail_level >= self.str_detail_level:
@@ -802,7 +795,8 @@ class Inspector(Colorable):
         # Length (for strings and lists)
         try:
             out['length'] = str(len(obj))
-        except: pass
+        except Exception:
+            pass
 
         # Filename where object was defined
         binary_file = False
@@ -935,7 +929,7 @@ class Inspector(Colorable):
         if callable_obj is not None:
             try:
                 argspec = getargspec(callable_obj)
-            except (TypeError, AttributeError):
+            except Exception:
                 # For extensions/builtins we can't retrieve the argspec
                 pass
             else:

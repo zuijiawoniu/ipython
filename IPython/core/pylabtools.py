@@ -8,7 +8,6 @@ from io import BytesIO
 
 from IPython.core.display import _pngxy
 from IPython.utils.decorators import flag_calls
-from IPython.utils import py3compat
 
 # If user specifies a GUI, that dictates the backend, otherwise we read the
 # user's mpl default from the mpl rc structure
@@ -97,7 +96,6 @@ def print_figure(fig, fmt='png', bbox_inches='tight', **kwargs):
     Any keyword args are passed to fig.canvas.print_figure,
     such as ``quality`` or ``bbox_inches``.
     """
-    from matplotlib import rcParams
     # When there's an empty figure, we shouldn't return anything, otherwise we
     # get big blank areas in the qt console.
     if not fig.axes and not fig.lines:
@@ -109,13 +107,13 @@ def print_figure(fig, fmt='png', bbox_inches='tight', **kwargs):
         fmt = 'png'
     
     # build keyword args
-    kw = dict(
-        format=fmt,
-        facecolor=fig.get_facecolor(),
-        edgecolor=fig.get_edgecolor(),
-        dpi=dpi,
-        bbox_inches=bbox_inches,
-    )
+    kw = {
+        "format":fmt,
+        "facecolor":fig.get_facecolor(),
+        "edgecolor":fig.get_edgecolor(),
+        "dpi":dpi,
+        "bbox_inches":bbox_inches,
+    }
     # **kwargs get higher priority
     kw.update(kwargs)
     
@@ -134,7 +132,7 @@ def retina_figure(fig, **kwargs):
     if pngdata is None:
         return
     w, h = _pngxy(pngdata)
-    metadata = dict(width=w//2, height=h//2)
+    metadata = {"width": w//2, "height":h//2}
     return pngdata, metadata
 
 # We need a little factory function here to create the closure where
@@ -217,7 +215,7 @@ def select_figure_formats(shell, formats, **kwargs):
     jpg_formatter = shell.display_formatter.formatters['image/jpeg']
     pdf_formatter = shell.display_formatter.formatters['application/pdf']
 
-    if isinstance(formats, py3compat.string_types):
+    if isinstance(formats, str):
         formats = {formats}
     # cast in case of list / tuple
     formats = set(formats)
@@ -383,7 +381,7 @@ def configure_inline_support(shell, backend):
         shell.events.register('post_execute', flush_figures)
 
         # Save rcParams that will be overwrittern
-        shell._saved_rcParams = dict()
+        shell._saved_rcParams = {}
         for k in cfg.rc:
             shell._saved_rcParams[k] = matplotlib.rcParams[k]
         # load inline_rc

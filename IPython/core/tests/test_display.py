@@ -13,6 +13,7 @@ from IPython.core import display
 from IPython.core.getipython import get_ipython
 from IPython.utils.tempdir import NamedFileInTemporaryDirectory
 from IPython import paths as ipath
+from IPython.testing.tools import AssertPrints, AssertNotPrints
 
 import IPython.testing.decorators as dec
 
@@ -21,12 +22,36 @@ def test_image_size():
     thisurl = 'http://www.google.fr/images/srpr/logo3w.png'
     img = display.Image(url=thisurl, width=200, height=200)
     nt.assert_equal(u'<img src="%s" width="200" height="200"/>' % (thisurl), img._repr_html_())
+    img = display.Image(url=thisurl, metadata={'width':200, 'height':200})
+    nt.assert_equal(u'<img src="%s" width="200" height="200"/>' % (thisurl), img._repr_html_())
     img = display.Image(url=thisurl, width=200)
     nt.assert_equal(u'<img src="%s" width="200"/>' % (thisurl), img._repr_html_())
     img = display.Image(url=thisurl)
     nt.assert_equal(u'<img src="%s"/>' % (thisurl), img._repr_html_())
     img = display.Image(url=thisurl, unconfined=True)
     nt.assert_equal(u'<img src="%s" class="unconfined"/>' % (thisurl), img._repr_html_())
+
+
+def test_geojson():
+
+    gj = display.GeoJSON(data={
+            "type": "Feature",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [-81.327, 296.038]
+            },
+            "properties": {
+                "name": "Inca City"
+            }
+        },
+        url_template="http://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/{basemap_id}/{z}/{x}/{y}.png",
+        layer_options={
+            "basemap_id": "celestia_mars-shaded-16k_global",
+            "attribution": "Celestia/praesepe",
+            "minZoom": 0,
+            "maxZoom": 18,
+        })
+    nt.assert_equal(u'<IPython.core.display.GeoJSON object>', str(gj))
 
 def test_retina_png():
     here = os.path.dirname(__file__)
@@ -118,6 +143,32 @@ def test_set_matplotlib_formats_kwargs():
     expected = kwargs
     expected.update(cfg.print_figure_kwargs)
     nt.assert_equal(cell, expected)
+
+def test_display_available():
+    """
+    Test that display is available without import
+
+    We don't really care if it's in builtin or anything else, but it should
+    always be available.
+    """
+    ip = get_ipython()
+    with AssertNotPrints('NameError'):
+        ip.run_cell('display')
+    try:
+        ip.run_cell('del display')
+    except NameError:
+        pass # it's ok, it might be in builtins
+    # even if deleted it should be back
+    with AssertNotPrints('NameError'):
+        ip.run_cell('display')
+
+def test_textdisplayobj_pretty_repr():
+     p = display.Pretty("This is a simple test")
+     nt.assert_equal(repr(p), '<IPython.core.display.Pretty object>')
+     nt.assert_equal(p.data, 'This is a simple test')
+
+     p._show_mem_addr = True
+     nt.assert_equal(repr(p), object.__repr__(p))
 
 def test_displayobject_repr():
     h = display.HTML('<br />')

@@ -251,7 +251,7 @@ class YouTubeVideo(IFrame):
         start=int(timedelta(hours=1, minutes=46, seconds=40).total_seconds())
 
     Other parameters can be provided as documented at
-    https://developers.google.com/youtube/player_parameters#parameter-subheader
+    https://developers.google.com/youtube/player_parameters#Parameters
     
     When converting the notebook using nbconvert, a jpeg representation of the video
     will be inserted in the document.
@@ -263,10 +263,9 @@ class YouTubeVideo(IFrame):
         super(YouTubeVideo, self).__init__(src, width, height, **kwargs)
     
     def _repr_jpeg_(self):
-        try:
-            from urllib.request import urlopen  # Py3
-        except ImportError:
-            from urllib2 import urlopen
+        # Deferred import
+        from urllib.request import urlopen
+
         try:
             return urlopen("https://img.youtube.com/vi/{id}/hqdefault.jpg".format(id=self.id)).read()
         except IOError:
@@ -324,11 +323,11 @@ class FileLink(object):
         ----------
         path : str
             path to the file or directory that should be formatted
-        directory_prefix : str
+        url_prefix : str
             prefix to be prepended to all files to form a working link [default:
-            'files']
+            '']
         result_html_prefix : str
-            text to append to beginning to link [default: none]
+            text to append to beginning to link [default: '']
         result_html_suffix : str
             text to append at the end of link [default: '<br>']
         """

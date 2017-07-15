@@ -22,14 +22,8 @@ import os
 import re
 import sys
 from importlib import import_module
+from importlib.machinery import all_suffixes
 
-try:
-    # Python >= 3.3
-    from importlib.machinery import all_suffixes
-    _suffixes = all_suffixes()
-except ImportError:
-    from imp import get_suffixes
-    _suffixes = [ s[0] for s in get_suffixes() ]
 
 # Third-party imports
 from time import time
@@ -39,14 +33,16 @@ from zipimport import zipimporter
 from IPython.core.completer import expand_user, compress_user
 from IPython.core.error import TryNext
 from IPython.utils._process_common import arg_split
-from IPython.utils.py3compat import string_types
 
 # FIXME: this should be pulled in with the right call via the component system
 from IPython import get_ipython
 
+from typing import List
+
 #-----------------------------------------------------------------------------
 # Globals and constants
 #-----------------------------------------------------------------------------
+_suffixes = all_suffixes()
 
 # Time in seconds after which the rootmodules will be stored permanently in the
 # ipython ip.db database (kept in the user's .ipython dir).
@@ -116,6 +112,11 @@ def get_root_modules():
     ip.db['rootmodules_cache'] maps sys.path entries to list of modules.
     """
     ip = get_ipython()
+    if ip is None:
+        # No global shell instance to store cached list of modules.
+        # Don't try to scan for modules every time.
+        return list(sys.builtin_module_names)
+
     rootmodules_cache = ip.db.get('rootmodules_cache', {})
     rootmodules = list(sys.builtin_module_names)
     start_time = time()
@@ -153,7 +154,12 @@ def is_importable(module, attr, only_modules):
     else:
         return not(attr[:2] == '__' and attr[-2:] == '__')
 
-def try_import(mod, only_modules=False):
+
+def try_import(mod: str, only_modules=False) -> List[str]:
+    """
+    Try to import given module and return list of potential completions.
+    """
+    mod = mod.rstrip('.')
     try:
         m = import_module(mod)
     except:
@@ -169,9 +175,9 @@ def try_import(mod, only_modules=False):
     completions.extend(getattr(m, '__all__', []))
     if m_is_init:
         completions.extend(module_list(os.path.dirname(m.__file__)))
-    completions = {c for c in completions if isinstance(c, string_types)}
-    completions.discard('__init__')
-    return list(completions)
+    completions_set = {c for c in completions if isinstance(c, str)}
+    completions_set.discard('__init__')
+    return list(completions_set)
 
 
 #-----------------------------------------------------------------------------
@@ -193,7 +199,7 @@ def quick_completer(cmd, completions):
         [d:\ipython]|3> foo ba
     """
 
-    if isinstance(completions, string_types):
+    if isinstance(completions, str):
         completions = completions.split()
 
     def do_complete(self, event):

@@ -16,10 +16,9 @@ import shutil
 import sys
 import tempfile
 import unittest
-try:
-    from unittest import mock
-except ImportError:
-    import mock
+from unittest import mock
+from io import StringIO
+
 from os.path import join
 
 import nose.tools as nt
@@ -32,12 +31,6 @@ from IPython.testing.decorators import (
 from IPython.testing import tools as tt
 from IPython.utils.process import find_cmd
 from IPython.utils import py3compat
-from IPython.utils.py3compat import unicode_type, PY3
-
-if PY3:
-    from io import StringIO
-else:
-    from StringIO import StringIO
 
 #-----------------------------------------------------------------------------
 # Globals
@@ -218,11 +211,13 @@ class InteractiveShellTestCase(unittest.TestCase):
         self.assertEqual(ip.var_expand(u'echo {f}'), u'echo Ca\xf1o')
         self.assertEqual(ip.var_expand(u'echo {f[:-1]}'), u'echo Ca\xf1')
         self.assertEqual(ip.var_expand(u'echo {1*2}'), u'echo 2')
+        
+        self.assertEqual(ip.var_expand(u"grep x | awk '{print $1}'"), u"grep x | awk '{print $1}'")
 
         ip.user_ns['f'] = b'Ca\xc3\xb1o'
         # This should not raise any exception:
         ip.var_expand(u'echo $f')
-    
+   
     def test_var_expand_local(self):
         """Test local variable expansion in !system and %magic calls"""
         # !system
@@ -473,7 +468,7 @@ class InteractiveShellTestCase(unittest.TestCase):
     def test_inspect_text(self):
         ip.run_cell('a = 5')
         text = ip.object_inspect_text('a')
-        self.assertIsInstance(text, unicode_type)
+        self.assertIsInstance(text, str)
 
 
 class TestSafeExecfileNonAsciiPath(unittest.TestCase):
@@ -485,7 +480,7 @@ class TestSafeExecfileNonAsciiPath(unittest.TestCase):
         os.mkdir(self.TESTDIR)
         with open(join(self.TESTDIR, u"åäötestscript.py"), "w") as sfile:
             sfile.write("pass\n")
-        self.oldpath = py3compat.getcwd()
+        self.oldpath = os.getcwd()
         os.chdir(self.TESTDIR)
         self.fname = u"åäötestscript.py"
 
@@ -605,12 +600,12 @@ class TestAstTransform(unittest.TestCase):
             called.add(x)
         ip.push({'f':f})
         
-        with tt.AssertPrints("average of "):
+        with tt.AssertPrints("std. dev. of"):
             ip.run_line_magic("timeit", "-n1 f(1)")
         self.assertEqual(called, {-1})
         called.clear()
 
-        with tt.AssertPrints("average of "):
+        with tt.AssertPrints("std. dev. of"):
             ip.run_cell_magic("timeit", "-n1 f(2)", "f(3)")
         self.assertEqual(called, {-2, -3})
     
@@ -678,12 +673,12 @@ class TestAstTransform2(unittest.TestCase):
             called.add(x)
         ip.push({'f':f})
 
-        with tt.AssertPrints("average of "):
+        with tt.AssertPrints("std. dev. of"):
             ip.run_line_magic("timeit", "-n1 f(1)")
         self.assertEqual(called, {(1,)})
         called.clear()
 
-        with tt.AssertPrints("average of "):
+        with tt.AssertPrints("std. dev. of"):
             ip.run_cell_magic("timeit", "-n1 f(2)", "f(3)")
         self.assertEqual(called, {(2,), (3,)})
 

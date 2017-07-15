@@ -17,17 +17,17 @@ import os
 import struct
 import sys
 import warnings
+from copy import deepcopy
 
-from IPython.utils.py3compat import (string_types, cast_bytes_py2, cast_unicode,
-                                     unicode_type)
+from IPython.utils.py3compat import cast_unicode
 from IPython.testing.skipdoctest import skip_doctest
 
 __all__ = ['display', 'display_pretty', 'display_html', 'display_markdown',
 'display_svg', 'display_png', 'display_jpeg', 'display_latex', 'display_json',
 'display_javascript', 'display_pdf', 'DisplayObject', 'TextDisplayObject',
-'Pretty', 'HTML', 'Markdown', 'Math', 'Latex', 'SVG', 'JSON', 'Javascript',
+'Pretty', 'HTML', 'Markdown', 'Math', 'Latex', 'SVG', 'JSON', 'GeoJSON', 'Javascript',
 'Image', 'clear_output', 'set_matplotlib_formats', 'set_matplotlib_close',
-'publish_display_data', 'update_display', 'DisplayHandle']
+'publish_display_data', 'update_display', 'DisplayHandle', 'Video']
 
 #-----------------------------------------------------------------------------
 # utility functions
@@ -146,6 +146,9 @@ def display(*objs, include=None, exclude=None, metadata=None, transient=None, di
     By default all representations will be computed and sent to the frontends.
     Frontends can decide which representation is used and how.
 
+    In terminal IPython this will be similar to using :func:`print`, for use in richer
+    frontends see Jupyter notebook examples with rich display logic.
+
     Parameters
     ----------
     objs : tuple of objects
@@ -153,11 +156,11 @@ def display(*objs, include=None, exclude=None, metadata=None, transient=None, di
     raw : bool, optional
         Are the objects to be displayed already mimetype-keyed dicts of raw display data,
         or Python objects that need to be formatted before display? [default: False]
-    include : list or tuple, optional
+    include : list, tuple or set, optional
         A list of format type strings (MIME types) to include in the
         format data dict. If this is set *only* the format types included
         in this list will be computed.
-    exclude : list or tuple, optional
+    exclude : list, tuple or set, optional
         A list of format type strings (MIME types) to exclude in the format
         data dict. If this is set all format types will be computed,
         except for those included in this argument.
@@ -168,33 +171,134 @@ def display(*objs, include=None, exclude=None, metadata=None, transient=None, di
     transient : dict, optional
         A dictionary of transient data to associate with the output.
         Data in this dict should not be persisted to files (e.g. notebooks).
-    display_id : str, optional
+    display_id : str, bool optional
         Set an id for the display.
         This id can be used for updating this display area later via update_display.
-        If given as True, generate a new display_id
+        If given as `True`, generate a new `display_id`
     kwargs: additional keyword-args, optional
         Additional keyword-arguments are passed through to the display publisher.
-    
+
     Returns
     -------
-    
+
     handle: DisplayHandle
-        Returns a handle on updatable displays, if display_id is given.
-        Returns None if no display_id is given (default).
+        Returns a handle on updatable displays for use with :func:`update_display`,
+        if `display_id` is given. Returns :any:`None` if no `display_id` is given
+        (default).
+
+    Examples
+    --------
+
+    >>> class Json(object):
+    ...     def __init__(self, json):
+    ...         self.json = json
+    ...     def _repr_pretty_(self, pp, cycle):
+    ...         import json
+    ...         pp.text(json.dumps(self.json, indent=2))
+    ...     def __repr__(self):
+    ...         return str(self.json)
+    ...
+
+    >>> d = Json({1:2, 3: {4:5}})
+
+    >>> print(d)
+    {1: 2, 3: {4: 5}}
+
+    >>> display(d)
+    {
+      "1": 2,
+      "3": {
+        "4": 5
+      }
+    }
+
+    >>> def int_formatter(integer, pp, cycle):
+    ...     pp.text('I'*integer)
+
+    >>> plain = get_ipython().display_formatter.formatters['text/plain']
+    >>> plain.for_type(int, int_formatter)
+    <function _repr_pprint at 0x...>
+    >>> display(7-5)
+    II
+
+    >>> del plain.type_printers[int]
+    >>> display(7-5)
+    2
+
+    See Also
+    --------
+
+    :func:`update_display`
+
+    Notes
+    -----
+
+    In Python, objects can declare their textual representation using the
+    `__repr__` method. IPython expands on this idea and allows objects to declare
+    other, rich representations including:
+
+      - HTML
+      - JSON
+      - PNG
+      - JPEG
+      - SVG
+      - LaTeX
+
+    A single object can declare some or all of these representations; all are
+    handled by IPython's display system.
+
+    The main idea of the first approach is that you have to implement special
+    display methods when you define your class, one for each representation you
+    want to use. Here is a list of the names of the special methods and the
+    values they must return:
+
+      - `_repr_html_`: return raw HTML as a string
+      - `_repr_json_`: return a JSONable dict
+      - `_repr_jpeg_`: return raw JPEG data
+      - `_repr_png_`: return raw PNG data
+      - `_repr_svg_`: return raw SVG data as a string
+      - `_repr_latex_`: return LaTeX commands in a string surrounded by "$".
+      - `_repr_mimebundle_`: return a full mimebundle containing the mapping
+      from all mimetypes to data
+
+    When you are directly writing your own classes, you can adapt them for
+    display in IPython by following the above approach. But in practice, you
+    often need to work with existing classes that you can't easily modify.
+
+    You can refer to the documentation on IPython display formatters in order to
+    register custom formatters for already existing types.
+
+    .. versionadded:: 5.4 display available without import
+    .. versionadded:: 6.1 display available without import
+
+    Since IPython 5.4 and 6.1 :func:`display` is automatically made available to
+    the user without import. If you are using display in a document that might
+    be used in a pure python context or with older version of IPython, use the
+    following import at the top of your file::
+
+        from IPython.display import display
+
     """
+    from IPython.core.interactiveshell import InteractiveShell
+    
+    if not InteractiveShell.initialized():
+        # Directly print objects.
+        print(*objs)
+        return
+    
     raw = kwargs.pop('raw', False)
     if transient is None:
         transient = {}
+    if metadata is None:
+        metadata={}
     if display_id:
-        if display_id == True:
+        if display_id is True:
             display_id = _new_id()
         transient['display_id'] = display_id
     if kwargs.get('update') and 'display_id' not in transient:
         raise TypeError('display_id required for update_display')
     if transient:
         kwargs['transient'] = transient
-
-    from IPython.core.interactiveshell import InteractiveShell
 
     if not raw:
         format = InteractiveShell.instance().display_formatter.format
@@ -226,6 +330,11 @@ def update_display(obj, *, display_id, **kwargs):
         The object with which to update the display
     display_id: keyword-only
         The id of the display to update
+
+    See Also
+    --------
+
+    :func:`display`
     """
     kwargs['update'] = True
     display(obj, display_id=display_id, **kwargs)
@@ -234,10 +343,16 @@ def update_display(obj, *, display_id, **kwargs):
 class DisplayHandle(object):
     """A handle on an updatable display
 
-    Call .update(obj) to display a new object.
+    Call `.update(obj)` to display a new object.
 
-    Call .display(obj) to add a new instance of this display,
+    Call `.display(obj`) to add a new instance of this display,
     and update existing instances.
+
+    See Also
+    --------
+
+        :func:`display`, :func:`update_display`
+
     """
 
     def __init__(self, display_id=None):
@@ -461,8 +576,9 @@ class DisplayObject(object):
 
     _read_flags = 'r'
     _show_mem_addr = False
+    metadata = None
 
-    def __init__(self, data=None, url=None, filename=None):
+    def __init__(self, data=None, url=None, filename=None, metadata=None):
         """Create a display object given raw data.
 
         When this object is returned by an expression or passed to the
@@ -480,8 +596,10 @@ class DisplayObject(object):
             A URL to download the data from.
         filename : unicode
             Path to a local file to load the data from.
+        metadata : dict
+            Dict of metadata associated to be the object when displayed
         """
-        if data is not None and isinstance(data, string_types):
+        if data is not None and isinstance(data, str):
             if data.startswith('http') and url is None:
                 url = data
                 filename = None
@@ -493,7 +611,12 @@ class DisplayObject(object):
 
         self.data = data
         self.url = url
-        self.filename = None if filename is None else unicode_type(filename)
+        self.filename = filename
+
+        if metadata is not None:
+            self.metadata = metadata
+        elif self.metadata is None:
+            self.metadata = {}
 
         self.reload()
         self._check_data()
@@ -510,6 +633,13 @@ class DisplayObject(object):
         """Override in subclasses if there's something to check."""
         pass
 
+    def _data_and_metadata(self):
+        """shortcut for returning metadata with shape information, if defined"""
+        if self.metadata:
+            return self.data, deepcopy(self.metadata)
+        else:
+            return self.data
+
     def reload(self):
         """Reload the raw data from file or URL."""
         if self.filename is not None:
@@ -517,10 +647,8 @@ class DisplayObject(object):
                 self.data = f.read()
         elif self.url is not None:
             try:
-                try:
-                    from urllib.request import urlopen  # Py3
-                except ImportError:
-                    from urllib2 import urlopen
+                # Deferred import
+                from urllib.request import urlopen
                 response = urlopen(self.url)
                 self.data = response.read()
                 # extract encoding from header, if there is one:
@@ -539,13 +667,13 @@ class DisplayObject(object):
 class TextDisplayObject(DisplayObject):
     """Validate that display data is text"""
     def _check_data(self):
-        if self.data is not None and not isinstance(self.data, string_types):
+        if self.data is not None and not isinstance(self.data, str):
             raise TypeError("%s expects text, not %r" % (self.__class__.__name__, self.data))
 
 class Pretty(TextDisplayObject):
 
-    def _repr_pretty_(self):
-        return self.data
+    def _repr_pretty_(self, pp, cycle):
+        return pp.text(self.data)
 
 
 class HTML(TextDisplayObject):
@@ -583,6 +711,7 @@ class Latex(TextDisplayObject):
 
 class SVG(DisplayObject):
 
+    _read_flags = 'rb'
     # wrap data in a property, which extracts the <svg> tag, discarding
     # document headers
     _data = None
@@ -598,7 +727,6 @@ class SVG(DisplayObject):
             return
         # parse into dom object
         from xml.dom import minidom
-        svg = cast_bytes_py2(svg)
         x = minidom.parseString(svg)
         # get svg tag (should be 1)
         found_svg = x.getElementsByTagName('svg')
@@ -610,9 +738,9 @@ class SVG(DisplayObject):
             pass
         svg = cast_unicode(svg)
         self._data = svg
-
+    
     def _repr_svg_(self):
-        return self.data
+        return self._data_and_metadata()
 
 
 class JSON(DisplayObject):
@@ -624,7 +752,7 @@ class JSON(DisplayObject):
     """
     # wrap data in a property, which warns about passing already-serialized JSON
     _data = None
-    def __init__(self, data=None, url=None, filename=None, expanded=False, metadata=None):
+    def __init__(self, data=None, url=None, filename=None, expanded=False, metadata=None, **kwargs):
         """Create a JSON display object given raw data.
 
         Parameters
@@ -642,8 +770,11 @@ class JSON(DisplayObject):
         metadata: dict
             Specify extra metadata to attach to the json display object.
         """
-        self.expanded = expanded
-        self.metadata = metadata
+        self.metadata = {'expanded': expanded}
+        if metadata:
+            self.metadata.update(metadata)
+        if kwargs:
+            self.metadata.update(kwargs)
         super(JSON, self).__init__(data=data, url=url, filename=filename)
 
     def _check_data(self):
@@ -656,31 +787,99 @@ class JSON(DisplayObject):
 
     @data.setter
     def data(self, data):
-        if isinstance(data, string_types):
-            warnings.warn("JSON expects JSONable dict or list, not JSON strings")
+        if isinstance(data, str):
+            if getattr(self, 'filename', None) is None:
+                warnings.warn("JSON expects JSONable dict or list, not JSON strings")
             data = json.loads(data)
         self._data = data
 
     def _data_and_metadata(self):
-        md = {'expanded': self.expanded}
-        if self.metadata:
-            md.update(self.metadata)
-        return self.data, md
+        return self.data, self.metadata
 
     def _repr_json_(self):
         return self._data_and_metadata()
 
-css_t = """$("head").append($("<link/>").attr({
+_css_t = """$("head").append($("<link/>").attr({
   rel:  "stylesheet",
   type: "text/css",
   href: "%s"
 }));
 """
 
-lib_t1 = """$.getScript("%s", function () {
+_lib_t1 = """$.getScript("%s", function () {
 """
-lib_t2 = """});
+_lib_t2 = """});
 """
+
+class GeoJSON(JSON):
+    """GeoJSON expects JSON-able dict
+
+    not an already-serialized JSON string.
+
+    Scalar types (None, number, string) are not allowed, only dict containers.
+    """
+    
+    def __init__(self, *args, **kwargs):
+        """Create a GeoJSON display object given raw data.
+
+        Parameters
+        ----------
+        data : dict or list
+            VegaLite data. Not an already-serialized JSON string.
+            Scalar types (None, number, string) are not allowed, only dict
+            or list containers.
+        url_template : string
+            Leaflet TileLayer URL template: http://leafletjs.com/reference.html#url-template
+        layer_options : dict
+            Leaflet TileLayer options: http://leafletjs.com/reference.html#tilelayer-options
+        url : unicode
+            A URL to download the data from.
+        filename : unicode
+            Path to a local file to load the data from.
+        metadata: dict
+            Specify extra metadata to attach to the json display object.
+
+        Examples
+        --------
+
+        The following will display an interactive map of Mars with a point of
+        interest on frontend that do support GeoJSON display.
+
+            >>> from IPython.display import GeoJSON
+
+            >>> GeoJSON(data={
+            ...     "type": "Feature",
+            ...     "geometry": {
+            ...         "type": "Point",
+            ...         "coordinates": [-81.327, 296.038]
+            ...     }
+            ... },
+            ... url_template="http://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/{basemap_id}/{z}/{x}/{y}.png",
+            ... layer_options={
+            ...     "basemap_id": "celestia_mars-shaded-16k_global",
+            ...     "attribution" : "Celestia/praesepe",
+            ...     "minZoom" : 0,
+            ...     "maxZoom" : 18,
+            ... })
+            <IPython.core.display.GeoJSON object>
+
+        In the terminal IPython, you will only see the text representation of
+        the GeoJSON object.
+
+        """
+        
+        super(GeoJSON, self).__init__(*args, **kwargs)
+
+
+    def _ipython_display_(self):
+        bundle = {
+            'application/geo+json': self.data,
+            'text/plain': '<IPython.display.GeoJSON object>'
+        }
+        metadata = {
+            'application/geo+json': self.metadata
+        }
+        display(bundle, metadata=metadata, raw=True)
 
 class Javascript(TextDisplayObject):
 
@@ -714,11 +913,11 @@ class Javascript(TextDisplayObject):
             The full URLs of the css files should be given. A single css URL
             can also be given as a string.
         """
-        if isinstance(lib, string_types):
+        if isinstance(lib, str):
             lib = [lib]
         elif lib is None:
             lib = []
-        if isinstance(css, string_types):
+        if isinstance(css, str):
             css = [css]
         elif css is None:
             css = []
@@ -733,11 +932,11 @@ class Javascript(TextDisplayObject):
     def _repr_javascript_(self):
         r = ''
         for c in self.css:
-            r += css_t % c
+            r += _css_t % c
         for l in self.lib:
-            r += lib_t1 % l
+            r += _lib_t1 % l
         r += self.data
-        r += lib_t2*len(self.lib)
+        r += _lib_t2*len(self.lib)
         return r
 
 # constants for identifying png/jpeg data
@@ -847,7 +1046,7 @@ class Image(DisplayObject):
             ext = self._find_ext(url)
         elif data is None:
             raise ValueError("No image data found. Expecting filename, url, or data.")
-        elif isinstance(data, string_types) and (
+        elif isinstance(data, str) and (
             data.startswith('http') or _safe_exists(data)
         ):
             ext = self._find_ext(data)
@@ -876,7 +1075,7 @@ class Image(DisplayObject):
             # jpg->jpeg
             format = self._FMT_JPEG
 
-        self.format = unicode_type(format).lower()
+        self.format = format.lower()
         self.embed = embed if embed is not None else (url is None)
 
         if self.embed and self.format not in self._ACCEPTABLE_EMBEDDINGS:
@@ -885,8 +1084,14 @@ class Image(DisplayObject):
         self.height = height
         self.retina = retina
         self.unconfined = unconfined
-        self.metadata = metadata
-        super(Image, self).__init__(data=data, url=url, filename=filename)
+        super(Image, self).__init__(data=data, url=url, filename=filename, 
+                metadata=metadata)
+
+        if self.width is None and self.metadata.get('width', {}):
+            self.width = metadata['width']
+
+        if self.height is None and self.metadata.get('height', {}):
+            self.height = metadata['height']
 
         if retina:
             self._retina_shape()
@@ -931,14 +1136,14 @@ class Image(DisplayObject):
     def _data_and_metadata(self):
         """shortcut for returning metadata with shape information, if defined"""
         md = {}
+        if self.metadata:
+            md.update(self.metadata)
         if self.width:
             md['width'] = self.width
         if self.height:
             md['height'] = self.height
         if self.unconfined:
             md['unconfined'] = self.unconfined
-        if self.metadata:
-            md.update(self.metadata)
         if md:
             return self.data, md
         else:
@@ -953,7 +1158,7 @@ class Image(DisplayObject):
             return self._data_and_metadata()
 
     def _find_ext(self, s):
-        return unicode_type(s.split('.')[-1].lower())
+        return s.split('.')[-1].lower()
 
 class Video(DisplayObject):
 
@@ -998,7 +1203,7 @@ class Video(DisplayObject):
         Video('path/to/video.mp4', embed=True)
         Video(b'raw-videodata', embed=True)
         """
-        if url is None and isinstance(data, string_types) and data.startswith(('http:', 'https:')):
+        if url is None and isinstance(data, str) and data.startswith(('http:', 'https:')):
             url = data
             data = None
         elif os.path.exists(data):
@@ -1037,7 +1242,7 @@ class Video(DisplayObject):
                 video = f.read()
         else:
             video = self.data
-        if isinstance(video, unicode_type):
+        if isinstance(video, str):
             # unicode input is already b64-encoded
             b64_video = video
         else:

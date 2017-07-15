@@ -6,7 +6,6 @@
 # Distributed under the terms of the Modified BSD License.
 
 import inspect
-from .py3compat import string_types
 
 
 def safe_hasattr(obj, attr):
@@ -41,10 +40,13 @@ def dir2(obj):
         # TypeError: dir(obj) does not return a list
         words = set()
 
+    if safe_hasattr(obj, '__class__'):
+        words |= set(dir(obj.__class__))
+
     # filter out non-string attributes which may be stuffed by dir() calls
     # and poor coding in third-party modules
 
-    words = [w for w in words if isinstance(w, string_types)]
+    words = [w for w in words if isinstance(w, str)]
     return sorted(words)
 
 

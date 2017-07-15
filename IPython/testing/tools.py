@@ -322,15 +322,7 @@ def check_pairs(func, pairs):
         assert out == expected, pair_fail_msg.format(name, inp, expected, out)
 
 
-if py3compat.PY3:
-    MyStringIO = StringIO
-else:
-    # In Python 2, stdout/stderr can have either bytes or unicode written to them,
-    # so we need a class that can handle both.
-    class MyStringIO(StringIO):
-        def write(self, s):
-            s = py3compat.cast_unicode(s, encoding=DEFAULT_ENCODING)
-            super(MyStringIO, self).write(s)
+MyStringIO = StringIO
 
 _re_type = type(re.compile(r''))
 
@@ -354,7 +346,7 @@ class AssertPrints(object):
     """
     def __init__(self, s, channel='stdout', suppress=True):
         self.s = s
-        if isinstance(self.s, (py3compat.string_types, _re_type)):
+        if isinstance(self.s, (str, _re_type)):
             self.s = [self.s]
         self.channel = channel
         self.suppress = suppress
@@ -471,6 +463,6 @@ def help_all_output_test(subcommand=''):
     nt.assert_equal(rc, 0, err)
     nt.assert_not_in("Traceback", err)
     nt.assert_in("Options", out)
-    nt.assert_in("Class parameters", out)
+    nt.assert_in("Class", out)
     return out, err
 

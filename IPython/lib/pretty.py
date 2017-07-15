@@ -83,11 +83,11 @@ import types
 import re
 import datetime
 from collections import deque
-
-from IPython.utils.py3compat import PY3, PYPY, cast_unicode, string_types
-from IPython.utils.encoding import get_stream_enc
-
 from io import StringIO
+from warnings import warn
+
+from IPython.utils.decorators import undoc
+from IPython.utils.py3compat import PYPY
 
 
 __all__ = ['pretty', 'pprint', 'PrettyPrinter', 'RepresentationPrinter',
@@ -108,21 +108,19 @@ def _safe_getattr(obj, attr, default=None):
     except Exception:
         return default
 
-if PY3:
-    CUnicodeIO = StringIO
-else:
-    class CUnicodeIO(StringIO):
-        """StringIO that casts str to unicode on Python 2"""
-        def write(self, text):
-            return super(CUnicodeIO, self).write(
-                cast_unicode(text, encoding=get_stream_enc(sys.stdout)))
-
+@undoc
+class CUnicodeIO(StringIO):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        warn(("CUnicodeIO is deprecated since IPython 6.0. "
+              "Please use io.StringIO instead."),
+             DeprecationWarning, stacklevel=2)
 
 def pretty(obj, verbose=False, max_width=79, newline='\n', max_seq_length=MAX_SEQ_LENGTH):
     """
     Pretty print the object's representation.
     """
-    stream = CUnicodeIO()
+    stream = StringIO()
     printer = RepresentationPrinter(stream, verbose, max_width, newline, max_seq_length=max_seq_length)
     printer.pretty(obj)
     printer.flush()
@@ -485,11 +483,6 @@ class GroupQueue(object):
         except ValueError:
             pass
 
-try:
-    _baseclass_reprs = (object.__repr__, types.InstanceType.__repr__)
-except AttributeError:  # Python 3
-    _baseclass_reprs = (object.__repr__,)
-
 
 def _default_pprint(obj, p, cycle):
     """
@@ -497,7 +490,7 @@ def _default_pprint(obj, p, cycle):
     it's none of the builtin objects.
     """
     klass = _safe_getattr(obj, '__class__', None) or type(obj)
-    if _safe_getattr(klass, '__repr__', None) not in _baseclass_reprs:
+    if _safe_getattr(klass, '__repr__', None) is not object.__repr__:
         # A user-provided repr. Find newlines and replace them with p.break_()
         _repr_pprint(obj, p, cycle)
         return
@@ -679,13 +672,13 @@ def _type_pprint(obj, p, cycle):
     mod = _safe_getattr(obj, '__module__', None)
     try:
         name = obj.__qualname__
-        if not isinstance(name, string_types):
+        if not isinstance(name, str):
             # This can happen if the type implements __qualname__ as a property
             # or other descriptor in Python 2.
             raise Exception("Try __name__")
     except Exception:
         name = obj.__name__
-        if not isinstance(name, string_types):
+        if not isinstance(name, str):
             name = '<unknown type>'
 
     if mod in (None, '__builtin__', 'builtins', 'exceptions'):
@@ -771,7 +764,6 @@ except AttributeError: # Python 3
     _type_pprinters[slice] = _repr_pprint
     
 try:
-    _type_pprinters[xrange] = _repr_pprint
     _type_pprinters[long] = _repr_pprint
     _type_pprinters[unicode] = _repr_pprint
 except NameError:

@@ -16,7 +16,7 @@ from string import Formatter
 try:
     from pathlib import Path
 except ImportError:
-    # Python 2 backport
+    # for Python 3.3
     from pathlib2 import Path
 
 from IPython.utils import py3compat
@@ -159,7 +159,7 @@ class SList(list):
             except IndexError:
                 return ""
 
-        if isinstance(pattern, py3compat.string_types):
+        if isinstance(pattern, str):
             pred = lambda x : re.search(pattern, x, re.IGNORECASE)
         else:
             pred = pattern
@@ -307,8 +307,10 @@ def list_strings(arg):
         Out[9]: ['A', 'list', 'of', 'strings']
     """
 
-    if isinstance(arg, py3compat.string_types): return [arg]
-    else: return arg
+    if isinstance(arg, str):
+        return [arg]
+    else:
+        return arg
 
 
 def marquee(txt='',width=78,mark='*'):
@@ -568,7 +570,7 @@ class FullEvalFormatter(Formatter):
                 # format the object and append to the result
                 result.append(self.format_field(obj, ''))
 
-        return u''.join(py3compat.cast_unicode(s) for s in result)
+        return ''.join(py3compat.cast_unicode(s) for s in result)
 
 
 class DollarFormatter(FullEvalFormatter):
@@ -590,7 +592,7 @@ class DollarFormatter(FullEvalFormatter):
         In [4]: f.format('$a or {b}', a=1, b=2)
         Out[4]: '1 or 2'
     """
-    _dollar_pattern = re.compile("(.*?)\$(\$?[\w\.]+)")
+    _dollar_pattern_ignore_single_quote = re.compile("(.*?)\$(\$?[\w\.]+)(?=([^']*'[^']*')*[^']*$)")
     def parse(self, fmt_string):
         for literal_txt, field_name, format_spec, conversion \
                     in Formatter.parse(self, fmt_string):
@@ -598,7 +600,7 @@ class DollarFormatter(FullEvalFormatter):
             # Find $foo patterns in the literal text.
             continue_from = 0
             txt = ""
-            for m in self._dollar_pattern.finditer(literal_txt):
+            for m in self._dollar_pattern_ignore_single_quote.finditer(literal_txt):
                 new_txt, new_field = m.group(1,2)
                 # $$foo --> $foo
                 if new_field.startswith("$"):
@@ -619,10 +621,10 @@ def _col_chunks(l, max_rows, row_first=False):
     """Yield successive max_rows-sized column chunks from l."""
     if row_first:
         ncols = (len(l) // max_rows) + (len(l) % max_rows > 0)
-        for i in py3compat.xrange(ncols):
-            yield [l[j] for j in py3compat.xrange(i, len(l), ncols)]
+        for i in range(ncols):
+            yield [l[j] for j in range(i, len(l), ncols)]
     else:
-        for i in py3compat.xrange(0, len(l), max_rows):
+        for i in range(0, len(l), max_rows):
             yield l[i:(i + max_rows)]
 
 

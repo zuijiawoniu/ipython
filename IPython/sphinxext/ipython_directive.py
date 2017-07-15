@@ -126,6 +126,7 @@ Authors
 
 # Stdlib
 import atexit
+import errno
 import os
 import re
 import sys
@@ -133,23 +134,16 @@ import tempfile
 import ast
 import warnings
 import shutil
-
+from io import StringIO
 
 # Third-party
 from docutils.parsers.rst import directives
-from sphinx.util.compat import Directive
+from docutils.parsers.rst import Directive
 
 # Our own
 from traitlets.config import Config
 from IPython import InteractiveShell
 from IPython.core.profiledir import ProfileDir
-from IPython.utils import io
-from IPython.utils.py3compat import PY3
-
-if PY3:
-    from io import StringIO
-else:
-    from StringIO import StringIO
 
 #-----------------------------------------------------------------------------
 # Globals
@@ -364,9 +358,9 @@ class EmbeddedSphinxShell(object):
         source_dir = self.source_dir
         saveargs = decorator.split(' ')
         filename = saveargs[1]
-        # insert relative path to image file in source
-        outfile = os.path.relpath(os.path.join(savefig_dir,filename),
-                    source_dir)
+        # insert relative path to image file in source (as absolute path for Sphinx)
+        outfile = '/' + os.path.relpath(os.path.join(savefig_dir,filename),
+                                        source_dir)
 
         imagerows = ['.. image:: %s'%outfile]
 
@@ -848,14 +842,9 @@ class IPythonDirective(Directive):
         config = self.state.document.settings.env.config
 
         # get config variables to set figure output directory
-        outdir = self.state.document.settings.env.app.outdir
         savefig_dir = config.ipython_savefig_dir
-        source_dir = os.path.dirname(self.state.document.current_source)
-        if savefig_dir is None:
-            savefig_dir = config.html_static_path or '_static'
-        if isinstance(savefig_dir, list):
-            savefig_dir = os.path.join(*savefig_dir)
-        savefig_dir = os.path.join(outdir, savefig_dir)
+        source_dir = self.state.document.settings.env.srcdir
+        savefig_dir = os.path.join(source_dir, savefig_dir)
 
         # get regex and prompt stuff
         rgxin      = config.ipython_rgxin
@@ -873,6 +862,12 @@ class IPythonDirective(Directive):
         # Get configuration values.
         (savefig_dir, source_dir, rgxin, rgxout, promptin, promptout,
          mplbackend, exec_lines, hold_count) = self.get_config_options()
+
+        try:
+            os.makedirs(savefig_dir)
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                raise
 
         if self.shell is None:
             # We will be here many times.  However, when the
@@ -982,7 +977,7 @@ def setup(app):
     setup.app = app
 
     app.add_directive('ipython', IPythonDirective)
-    app.add_config_value('ipython_savefig_dir', None, 'env')
+    app.add_config_value('ipython_savefig_dir', 'savefig', 'env')
     app.add_config_value('ipython_rgxin',
                          re.compile('In \[(\d+)\]:\s?(.*)\s*'), 'env')
     app.add_config_value('ipython_rgxout',
@@ -1166,7 +1161,7 @@ array([[ inf,  nan,   2.,   3.],
 
     #ipython_directive.DEBUG = True  # dbg
     #options = dict(suppress=True)  # dbg
-    options = dict()
+    options = {}
     for example in examples:
         content = example.split('\n')
         IPythonDirective('debug', arguments=None, options=options,

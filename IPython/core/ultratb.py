@@ -100,7 +100,6 @@ import sys
 import time
 import tokenize
 import traceback
-import types
 
 try:  # Python 2
     generate_tokens = tokenize.generate_tokens
@@ -120,7 +119,6 @@ from IPython.utils import PyColorize
 from IPython.utils import openpy
 from IPython.utils import path as util_path
 from IPython.utils import py3compat
-from IPython.utils import ulinecache
 from IPython.utils.data import uniq_stable
 from IPython.utils.terminal import get_terminal_size
 from logging import info, error
@@ -190,11 +188,11 @@ def findsource(object):
         # use the one with the least indentation, which is the one
         # that's most probably not inside a function definition.
         candidates = []
-        for i in range(len(lines)):
-            match = pat.match(lines[i])
+        for i, line in enumerate(lines):
+            match = pat.match(line)
             if match:
                 # if it's at toplevel, it's already the best one
-                if lines[i][0] == 'c':
+                if line[0] == 'c':
                     return lines, i
                 # else add whitespace to candidate list
                 candidates.append((match.group(1), i))
@@ -299,7 +297,10 @@ def getargs(co):
 
 # Monkeypatch inspect to apply our bugfix.
 def with_patch_inspect(f):
-    """decorator for monkeypatching inspect.findsource"""
+    """
+    Deprecated since IPython 6.0
+    decorator for monkeypatching inspect.findsource
+    """
 
     def wrapped(*args, **kwargs):
         save_findsource = inspect.findsource
@@ -315,16 +316,6 @@ def with_patch_inspect(f):
     return wrapped
 
 
-if py3compat.PY3:
-    fixed_getargvalues = inspect.getargvalues
-else:
-    # Fixes for https://github.com/ipython/ipython/issues/8293
-    #       and https://github.com/ipython/ipython/issues/8205.
-    # The relevant bug is caused by failure to correctly handle anonymous tuple
-    # unpacking, which only exists in Python 2.
-    fixed_getargvalues = with_patch_inspect(inspect.getargvalues)
-
-
 def fix_frame_records_filenames(records):
     """Try to fix the filenames in each record from inspect.getinnerframes().
 
@@ -336,7 +327,6 @@ def fix_frame_records_filenames(records):
         # Look inside the frame's globals dictionary for __file__,
         # which should be better. However, keep Cython filenames since
         # we prefer the source filenames over the compiled .so file.
-        filename = py3compat.cast_unicode_py2(filename, "utf-8")
         if not filename.endswith(('.pyx', '.pxd', '.pxi')):
             better_fn = frame.f_globals.get('__file__', None)
             if isinstance(better_fn, str):
@@ -366,11 +356,11 @@ def _fixed_getinnerframes(etb, context=1, tb_offset=0):
 
     aux = traceback.extract_tb(etb)
     assert len(records) == len(aux)
-    for i, (file, lnum, _, _) in zip(range(len(records)), aux):
+    for i, (file, lnum, _, _) in enumerate(aux):
         maybeStart = lnum - 1 - context // 2
         start = max(maybeStart, 0)
         end = start + context
-        lines = ulinecache.getlines(file)[start:end]
+        lines = linecache.getlines(file)[start:end]
         buf = list(records[i])
         buf[LNUM_POS] = lnum
         buf[INDEX_POS] = lnum - 1 - start
@@ -660,9 +650,9 @@ class ListTB(TBTools):
         list = []
         for filename, lineno, name, line in extracted_list[:-1]:
             item = '  File %s"%s"%s, line %s%d%s, in %s%s%s\n' % \
-                   (Colors.filename, py3compat.cast_unicode_py2(filename, "utf-8"), Colors.Normal,
+                   (Colors.filename, filename, Colors.Normal,
                     Colors.lineno, lineno, Colors.Normal,
-                    Colors.name, py3compat.cast_unicode_py2(name, "utf-8"), Colors.Normal)
+                    Colors.name, name, Colors.Normal)
             if line:
                 item += '    %s\n' % line.strip()
             list.append(item)
@@ -670,9 +660,9 @@ class ListTB(TBTools):
         filename, lineno, name, line = extracted_list[-1]
         item = '%s  File %s"%s"%s, line %s%d%s, in %s%s%s%s\n' % \
                (Colors.normalEm,
-                Colors.filenameEm, py3compat.cast_unicode_py2(filename, "utf-8"), Colors.normalEm,
+                Colors.filenameEm, filename, Colors.normalEm,
                 Colors.linenoEm, lineno, Colors.normalEm,
-                Colors.nameEm, py3compat.cast_unicode_py2(name, "utf-8"), Colors.normalEm,
+                Colors.nameEm, name, Colors.normalEm,
                 Colors.Normal)
         if line:
             item += '%s    %s%s\n' % (Colors.line, line.strip(),
@@ -706,7 +696,7 @@ class ListTB(TBTools):
                 if not value.filename: value.filename = "<string>"
                 if value.lineno:
                     lineno = value.lineno
-                    textline = ulinecache.getline(value.filename, value.lineno)
+                    textline = linecache.getline(value.filename, value.lineno)
                 else:
                     lineno = 'unknown'
                     textline = ''
@@ -878,8 +868,8 @@ class VerboseTB(TBTools):
                     pass
 
         file = py3compat.cast_unicode(file, util_path.fs_encoding)
-        link = tpl_link % file
-        args, varargs, varkw, locals = fixed_getargvalues(frame)
+        link = tpl_link % util_path.compress_user(file)
+        args, varargs, varkw, locals = inspect.getargvalues(frame)
 
         if func == '?':
             call = ''
@@ -922,7 +912,7 @@ class VerboseTB(TBTools):
                 # E.g. https://github.com/ipython/ipython/issues/9486
                 return '%s %s\n' % (link, call)
 
-        def linereader(file=file, lnum=[lnum], getline=ulinecache.getline):
+        def linereader(file=file, lnum=[lnum], getline=linecache.getline):
             line = getline(file, lnum[0])
             lnum[0] += 1
             return line
@@ -1055,27 +1045,8 @@ class VerboseTB(TBTools):
             etype, evalue = str, sys.exc_info()[:2]
             etype_str, evalue_str = map(str, (etype, evalue))
         # ... and format it
-        exception = ['%s%s%s: %s' % (colors.excName, etype_str,
-                                     colorsnormal, py3compat.cast_unicode(evalue_str))]
-
-        if (not py3compat.PY3) and type(evalue) is types.InstanceType:
-            try:
-                names = [w for w in dir(evalue) if isinstance(w, py3compat.string_types)]
-            except:
-                # Every now and then, an object with funny internals blows up
-                # when dir() is called on it.  We do the best we can to report
-                # the problem and continue
-                _m = '%sException reporting error (object with broken dir())%s:'
-                exception.append(_m % (colors.excName, colorsnormal))
-                etype_str, evalue_str = map(str, sys.exc_info()[:2])
-                exception.append('%s%s%s: %s' % (colors.excName, etype_str,
-                                                 colorsnormal, py3compat.cast_unicode(evalue_str)))
-                names = []
-            for name in names:
-                value = text_repr(getattr(evalue, name))
-                exception.append('\n%s%s = %s' % (indent, name, value))
-
-        return exception
+        return ['%s%s%s: %s' % (colors.excName, etype_str,
+                                colorsnormal, py3compat.cast_unicode(evalue_str))]
 
     def format_exception_as_a_whole(self, etype, evalue, etb, number_of_lines_of_context, tb_offset):
         """Formats the header, traceback and exception message for a single exception.
@@ -1429,10 +1400,10 @@ class SyntaxTB(ListTB):
         # be wrong (retrieved from an outdated cache). This replaces it with
         # the current value.
         if isinstance(value, SyntaxError) \
-                and isinstance(value.filename, py3compat.string_types) \
+                and isinstance(value.filename, str) \
                 and isinstance(value.lineno, int):
             linecache.checkcache(value.filename)
-            newtext = ulinecache.getline(value.filename, value.lineno)
+            newtext = linecache.getline(value.filename, value.lineno)
             if newtext:
                 value.text = newtext
         self.last_syntax_error = value
